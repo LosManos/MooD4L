@@ -2,6 +2,7 @@
 <#@ Assembly Name="System.Xml" #>
 <#@ Assembly Name="System.Core" #>
 <#@ Assembly Name="Microsoft.SqlServer.ConnectionInfo" #>
+<#@ Assembly Name="Microsoft.SqlServer.SqlEnum" #>
 <#@ Assembly Name="Microsoft.SqlServer.Management.Sdk.Sfc" #>
 <#@ Assembly Name="Microsoft.SqlServer.Smo" #>
 <#@ Assembly Name="System.Data" #>
@@ -39,7 +40,7 @@
             // TODO: Change namespace parameter to constant.
             OutputSurface( "DataLayer.Surface", xmldoc );
             
-            /* foreach (Table table in tables)
+            foreach (Table table in tables)
             {
                 if ( IsClassOkToGenerate( table ) )
                 {
@@ -51,12 +52,13 @@
                     project.ProjectItems.AddFromFile(path);
                 }
             }
-            */
+            
         }
     }
 #>
 <#+
 	
+    //  http://msdn.microsoft.com/en-us/library/bb386947.aspx
     private readonly static Dictionary<string, string> TypeMappings = new Dictionary<string, string> 
     {
         { "bit","bool" },           { "uniqueidentifier","Guid" },
@@ -107,7 +109,9 @@
         {
             ret += " partial";
         }
-        return ret + " class " + tableName + "Surface";
+
+        // TODO: Add inheritance as a setting.
+        return ret + " class " + tableName + "Surface : SurfaceBase, ISurface";
    }
 
     private static string CreateFileHeader( string commentPrefix, string commentSuffix = null )
@@ -170,14 +174,48 @@
 
     private static IEnumerable<string> CreateMethodParameterList( IEnumerable<XmlNode> nodeList )
     {
-        return
-            nodeList
-                .Select( c => CreateMethodParameter( (XmlElement)c ) );
+        return nodeList.Select( c => CreateMethodParameter( c ) );
     }
 
     private static string CreateMethodParameterListString( IEnumerable<XmlNode> nodeList )
     {
         return string.Join( ", ", CreateMethodParameterList( nodeList ) );
+    }
+
+    private static string CreateQuerySelectEqualParameter( XmlNode node )
+    {
+        return string.Format( "{0} = @{1}", 
+            node.Attributes["Name"].Value, 
+            node.Attributes["Name"].Value
+        );
+    }
+
+    private static IEnumerable<string> CreateQuerySelectEqualParameterList( IEnumerable<XmlNode> nodeList )
+    {
+        return nodeList.Select( c => CreateQuerySelectEqualParameter( c ) );
+    }
+
+    private static string CreateQuerySelectEqualParameterListString( IEnumerable<XmlNode> nodeList )
+    {
+        return string.Join( " && ", CreateQuerySelectEqualParameterList( nodeList ) );
+    }
+
+    private static string CreateObjectAssignmentParameter( XmlNode node )
+    {
+        return string.Format( "{0} = {1}", 
+            node.Attributes["Name"].Value, 
+            node.Attributes["Name"].Value
+        );        
+    }
+
+    private static IEnumerable<string> CreateObjectAssignmentParameterList( IEnumerable<XmlNode> nodeList )
+    {
+        return nodeList.Select( n => CreateObjectAssignmentParameter( n ) );
+    }
+
+    private static string CreateObjectAssignmentParameterListString( IEnumerable<XmlNode> nodeList )
+    {
+        return string.Join( ", ", CreateObjectAssignmentParameterList( nodeList ) );
     }
 
     /// <summary> This method creates a method signature.
@@ -307,6 +345,40 @@
 #><#= String.Format(stuff, args) + System.Environment.NewLine #><#+
     }
 
+    private void Out_SurfaceFindMethod( string tableName, IEnumerable<XmlNode> columnsUsedInForeignKey )
+    {
+        // TODO: Move method signature creator to a method of its own.
+        // TODO: Set schema by parameter, not hard coded as right now.
+        // TODO: Write a comment to the method that selects the primary key that it does just that.  It should also return just 1 record.
+        Out( "public List<DTO.{0}> FindBy{1}( {2} )", 
+            tableName, 
+            string.Join( "And", columnsUsedInForeignKey.Select( c => c.Attributes["Name"].Value ) ), 
+            CreateMethodParameterListString( columnsUsedInForeignKey )
+            );
+		Out("{");
+        PushIndent("\t");
+            Out( "using( var conn = CreateConnection()) ");
+            Out( "{" );
+            PushIndent("\t");
+                Out( "conn.Open();" );
+                // TODO: Set schema by parameter on the return class.
+                Out( "var res = conn.Query<DTO." + tableName + ">(" );
+                PushIndent("\t");
+                    Out( "@\"" );
+                    PushIndent("\t");
+                        Out( "select * from " + tableName );
+                        Out( "where " + CreateQuerySelectEqualParameterListString( columnsUsedInForeignKey ) + "\"," );
+                    PopIndent();
+                    Out( "new { " + CreateObjectAssignmentParameterListString( columnsUsedInForeignKey ) + " } );" );
+                PopIndent();
+			    Out("");
+                Out( "return res.ToList();" );
+            PopIndent();
+            Out( "}" );
+        PopIndent();
+		Out("}");
+    }
+
     string SaveOutput(string outputFileName)
     {
         // By some reason unknown to me the file the string contains a leading whitespace.  Hence the Trim.
@@ -386,7 +458,7 @@
         // We don't handle schema so to tables with the same name, in different schemas, 
         // will mess up the code generation.
         var root = document.DocumentElement;
-        var nodeList = root.SelectNodes( "/Database/Tables/Table" );
+        var nodeList = root.SelectNodes( "/Database/Tables/Table[@Include=\"True\"]" );
         foreach( XmlElement node in nodeList )
         {
             var fileName = OutputSurfaceFile( namespaceName, node );
@@ -403,10 +475,11 @@
 		    Out("// This class is automatically generated by ST4bby {0}.", System.DateTime.Now.ToString());
 		    Out("// Read more at https://github.com/jbubriski/ST4bby/");
 		    Out("");
-			Out("using System;");
+			Out( "using System;");
             Out( "using System.Collections.Generic;" );
-			Out("using System.ComponentModel.DataAnnotations;");
-            Out("using System.Linq;");
+			Out( "using System.ComponentModel.DataAnnotations;");
+            Out( "using System.Linq;");
+            Out( "using Dapper;");
 			Out( "" );
 		    Out( CreateSurfaceNamespaceSignature( namespaceName, UseSchemaForNamespace ) );
 		    Out("{");
@@ -424,35 +497,37 @@
                 foreach( XmlElement fkElement in fkNodeList )
                 {
                     //  Find every Column in this FK.
-                    var fkColumnList = ToList( fkElement.SelectNodes( "Columns/Column" ) );
                     var columnsUsedInForeignKey = 
                         from c in columnList
-                        where fkColumnList
+                        where ToList( fkElement.SelectNodes( "Columns/Column" ) )
                             .Select( fkC => fkC.Attributes["Name"].Value ).ToList().Contains( c.Attributes["Name"].Value )
                         select c;
-                    
-                    Out( "// Using index " + fkElement.Attributes["Name"].Value + "." );
-                    Out( "// for searching on field(s) " + string.Join( " and ", fkColumnList.Select( n=>n.Attributes["Name"].Value ) ) + "." );
-                    // TODO: Move method signature creator to a method of its own.
-                    Out( "public List<DTO.{0}> FindBy{1}( {2} )", 
-                        tableName, 
-                        string.Join( "And", fkColumnList.Select( n => n.Attributes["Name"].Value ) ),                         //null == fkElement.Attributes["Name"] ? "null": fkElement.Attributes["Name"].Value,  
-                        CreateMethodParameterListString( columnsUsedInForeignKey )
-                        );
-			        Out("{");
-                    // TODO: Läs in foreign keys i xmlen och leta upp den här
-                    // för att generera metoden.
-                    // tableNode.ownerDocument.SelectSingleNode( /
-                    foreach( XmlElement fkElem in tableElement.SelectNodes( "Columns/Column/ForeignKeys/ForeignKey" ) )
-                    {
-//                        Out( fkElem.Attributes["ColumName"].Value );
-                    }
-                    PushIndent("\t");
-                        Out( "return null;");
-                    PopIndent();
-			        Out("}");
+
+                    // TODO: Create better comment.  Xml-comment too.                    
+                    Out( "// Using foreign key " + fkElement.Attributes["Name"].Value + "." );
+                    Out( "// for searching on field(s) " + string.Join( " and ", columnsUsedInForeignKey.Select( n=>n.Attributes["Name"].Value ) ) + "." );
+                    Out_SurfaceFindMethod( tableName, columnsUsedInForeignKey );                        
                     Out("");
                 }
+
+                var indexList = ToList( tableElement.SelectNodes( "Indexes/Index" ) );
+                foreach( XmlElement indexElement in indexList )
+                {
+                    var columnsUsedInIndex = 
+                        from c in columnList
+                        where ToList( indexElement.SelectNodes( "Columns/Column" ) )
+                            .Select( ic => ic.Attributes["Name"].Value ).ToList().Contains( c.Attributes["Name"].Value )
+                        select c;
+
+                    // TODO: Create better comment. Xml comments too.
+                    // TODO: Comment that this is the method to search via the PK.
+                    // TODO: The method should return a single value if the index, like pk, is unique.
+                    Out( "// Using index " + indexElement.Attributes["Name"].Value );
+                    Out( "// for searching on field(s) " + string.Join( " and ", indexList.Select( i => i.Attributes["Name"].Value ) ) + "." );
+                    Out_SurfaceFindMethod( tableName, columnsUsedInIndex );
+                    Out( "" );
+                }
+
 			    PopIndent();
 			    Out("}");
 		    PopIndent();
@@ -502,6 +577,9 @@
             AppendAttribute( tableElement, "Name", table.Name );
             AppendAttribute( tableElement, "Include", IsClassOkToGenerate( table ) );
             AppendAttribute( tableElement, "Schema", table.Schema );
+            InsertCommentBefore( tableElement, "Name is the tablename, " + 
+                "Include is if the table should be included (all tables are in the schema but not all should become code, " +
+                "and Schema is the schema the table is in." );
 
             var columnsElement = AppendChildElement( tableElement, "Columns" );
 
@@ -514,7 +592,10 @@
                 var type = TypeMappings.ContainsKey(column.DataType.Name) ? TypeMappings[column.DataType.Name] : "string";
                 var typeFormat       = type != "string" && column.Nullable ? "Nullable<{0}>" : "{0}";
                 AppendAttribute( columnElement, "DotnetType", String.Format(typeFormat,type) );
-                AppendAttribute( columnElement, "PrimaryKey", column.InPrimaryKey );
+                AppendAttribute( columnElement, "IsPrimaryKey", column.InPrimaryKey );
+                AppendAttribute( columnElement, "IsForeignKey", column.IsForeignKey );
+                AppendAttribute( columnElement, "IsIdentity", column.Identity );  // Is really "identity" a good word for "autocounting pk" or whatever is a better name?
+                AppendAttribute( columnElement, "Length", column.DataType.MaximumLength );
 
                 //  Foreign keys are printed if any exists.
                 //  http://msdn.microsoft.com/en-us/library/microsoft.sqlserver.management.smo.foreignkey.aspx
@@ -529,28 +610,54 @@
                         AppendAttribute( columnForeignKeyElement, "ColumName", row[1].ToString() );
                         AppendAttribute( columnForeignKeyElement, "ForeignKeyName", row[2].ToString() );
                     }
-
                 }
-
             }
 
-            var tableForeignKeysElement = AppendChildElement( tableElement, "ForeignKeys" );
-            foreach( ForeignKey foreignKey in table.ForeignKeys )
-            {
-                var foreignKeyElement = AppendChildElement( tableForeignKeysElement, "ForeignKey" );
-                AppendAttribute( foreignKeyElement, "Name", foreignKey.Name );
-                AppendAttribute( foreignKeyElement, "ReferencedKey", foreignKey.ReferencedKey );
-                AppendAttribute( foreignKeyElement, "ReferencedTable", foreignKey.ReferencedTable );
-                InsertCommentBefore( foreignKeyElement, "The ForeignKey Name is the name of the FK.  ReferencedKey is the name of the index on the \"other\" side." );
+            if( table.ForeignKeys.Count >= 1 )
+            {   
+                var tableForeignKeysElement = AppendChildElement( tableElement, "ForeignKeys" );
+                foreach( ForeignKey foreignKey in table.ForeignKeys )
+                {
+                    var foreignKeyElement = AppendChildElement( tableForeignKeysElement, "ForeignKey" );
+                    AppendAttribute( foreignKeyElement, "Name", foreignKey.Name );
+                    AppendAttribute( foreignKeyElement, "ReferencedKey", foreignKey.ReferencedKey );
+                    AppendAttribute( foreignKeyElement, "ReferencedTable", foreignKey.ReferencedTable );
+                    InsertCommentBefore( foreignKeyElement, "The ForeignKey Name is the name of the FK.  ReferencedKey is the name of the index on the \"other\" side." );
 
-                var foreignKeyColumnsElement = AppendChildElement( foreignKeyElement, "Columns" );
-                foreach( ForeignKeyColumn column in foreignKey.Columns )
-                {   
-                    // http://msdn.microsoft.com/en-us/library/microsoft.sqlserver.management.smo.foreignkeycolumn.aspx
-                    var foreignKeyColumnElement = AppendChildElement( foreignKeyColumnsElement, "Column" );
-                    AppendAttribute( foreignKeyColumnElement, "Name", column.Name );
-                    AppendAttribute( foreignKeyColumnElement, "ReferencedColumn", column.ReferencedColumn );
-                    InsertCommentBefore( foreignKeyColumnElement, "Column Name is the column of this table while ReferencedColumn means the column of the other table." );
+                    var foreignKeyColumnsElement = AppendChildElement( foreignKeyElement, "Columns" );
+                    foreach( ForeignKeyColumn column in foreignKey.Columns )
+                    {   
+                        // http://msdn.microsoft.com/en-us/library/microsoft.sqlserver.management.smo.foreignkeycolumn.aspx
+                        var foreignKeyColumnElement = AppendChildElement( foreignKeyColumnsElement, "Column" );
+                        AppendAttribute( foreignKeyColumnElement, "Name", column.Name );
+                        AppendAttribute( foreignKeyColumnElement, "ReferencedColumn", column.ReferencedColumn );
+                        InsertCommentBefore( foreignKeyColumnElement, "Column Name is the column of this table while ReferencedColumn means the column of the other table." );
+                    }
+                }
+            }
+
+            if( table.Indexes.Count >= 1 )
+            {
+                var indexesElement = AppendChildElement( tableElement, "Indexes" );
+                foreach( Index index in table.Indexes )
+                {
+                    //  http://msdn.microsoft.com/en-us/library/microsoft.sqlserver.management.smo.index.aspx
+                    var indexElement = AppendChildElement( indexesElement, "Index" );
+                    AppendAttribute( indexElement, "Name", index.Name );
+                    //  http://msdn.microsoft.com/en-us/library/microsoft.sqlserver.management.smo.indexkeytype.aspx
+                    AppendAttribute( indexElement, "IndexType", 
+                        index.IndexKeyType == IndexKeyType.None ? "NotUnique" :
+                        index.IndexKeyType == IndexKeyType.DriPrimaryKey ? "PrimaryKey" :
+                        index.IndexKeyType == IndexKeyType.DriUniqueKey ? "Unique" :
+                        "Unknown - Error in script"
+                    );
+                    var indexColumnsElement = AppendChildElement( indexElement, "Columns" );
+                    foreach( IndexedColumn column in index.IndexedColumns )
+                    {
+                        // http://msdn.microsoft.com/en-us/library/microsoft.sqlserver.management.smo.indexedcolumn.aspx
+                        var indexColumnElement = AppendChildElement( indexColumnsElement, "Column" );
+                        AppendAttribute( indexColumnElement, "Name", column.Name );
+                    }
                 }
             }
 
@@ -575,6 +682,11 @@
     }
 
     private XmlAttribute AppendAttribute( XmlElement element, string name, bool value )
+    {
+        return AppendAttribute( element, name, value.ToString() );
+    }
+
+    private XmlAttribute AppendAttribute( XmlElement element, string name, int value )
     {
         return AppendAttribute( element, name, value.ToString() );
     }
