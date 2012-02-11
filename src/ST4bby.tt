@@ -489,7 +489,7 @@
 			    PushIndent("\t");
 
                 //  Find all colums for the Table.
-                var columnList = ToList( tableElement.SelectNodes( "Columns/Column" ) );
+                var columnList = ToList( tableElement.SelectNodes( "Columns/Column" ) ).Cast<XmlElement>();
 
                 //  We have a problem where an index and a fk points at the same columns.
                 //  In those cases we get two identical methods; which we can't have.
@@ -501,79 +501,89 @@
                 //  Then we make sure the same signature is not used twice.
                 var methodColumnList = new HashSet<string>();
 
-                //  Find all the indexes for the table.
-                var indexNodeList = ToList( tableElement.SelectNodes( "Indexes/Index" ) );
+                Out_SurfaceIndexFindMethods( tableName, columnList, methodColumnList, tableElement );
 
-                //  Loop the indexes and create one Find-method per index.
-                foreach( XmlElement indexElement in indexNodeList )
-                {
-                    //  Filter out the columns that are used for this index.
-                    //  Note that the table's columns come from tableElement->Columns/Column
-                    //  while the index's columns come from indexElement->Columns/Column.
-                    var columnsUsedInIndex = 
-                        from c in columnList
-                        where ToList( indexElement.SelectNodes( "Columns/Column" ) )
-                            .Select( ic => ic.Attributes["Name"].Value ).ToList()
-                            .Contains( c.Attributes["Name"].Value )
-                        select c;
-
-                    var paramString = string.Join( ",", columnsUsedInIndex.Select( c => c.Attributes["Name"].Value ) );
-                    if( methodColumnList.Contains( paramString ) )
-                    {
-                        Out( "// There is already a method with parameter(s) {0}.  Do you have redundant indexes or foreign keys?", paramString );
-                        Out( "" );
-                    }
-                    else
-                    {
-                        methodColumnList.Add( paramString );    // Add the new unique string of method parameters.
-
-                        // TODO: Create better comment. Xml comments too.
-                        // TODO: Comment that this is the method to search via the PK.
-                        // TODO: The method should return a single value if the index, like pk, is unique.
-                        Out( "// Using index " + indexElement.Attributes["Name"].Value );
-                        Out( "// for searching on field(s) " + string.Join( " and ", indexNodeList.Select( i => i.Attributes["Name"].Value ) ) + "." );
-                        Out_SurfaceFindMethod( tableName, columnsUsedInIndex );
-                        Out( "" );
-                    }
-                }
-
-                // Find every FK for the Table.  We want 1 method per FK since every FK can be searched on.
-                var fkNodeList = tableElement.SelectNodes( "ForeignKeys/ForeignKey" );
-
-                //  Loop the foreign keys and create one Find-method per fk.
-                foreach( XmlElement fkElement in fkNodeList )
-                {
-                    //  Filter out the columns that are used for this fk.
-                    //  Note that the table's columns come from tableElement->Columns/Column
-                    //  while the fk's columns come from fkElement->Columns/Column.
-                    var columnsUsedInForeignKey = 
-                        from c in columnList
-                        where ToList( fkElement.SelectNodes( "Columns/Column" ) )
-                            .Select( fkC => fkC.Attributes["Name"].Value ).ToList()
-                            .Contains( c.Attributes["Name"].Value )
-                        select c;
-
-                    var paramString = string.Join( ",", columnsUsedInForeignKey.Select( c => c.Attributes["Name"].Value ) );
-                    if( methodColumnList.Contains( paramString ) )
-                    {
-                        Out( "// There is already a method with parameter(s) {0}.  Do you have redundant indexes or foreign keys?", paramString );
-                        Out( "" );
-                    }
-                    else
-                    {
-                        // TODO: Create better comment.  Xml-comment too.                    
-                        Out( "// Using foreign key " + fkElement.Attributes["Name"].Value + "." );
-                        Out( "// for searching on field(s) " + string.Join( " and ", columnsUsedInForeignKey.Select( n=>n.Attributes["Name"].Value ) ) + "." );
-                        Out_SurfaceFindMethod( tableName, columnsUsedInForeignKey );                        
-                        Out("");
-                    }
-                }
-
+                Out_SurfaceForeignKeyFindMethods( tableName, columnList, methodColumnList, tableElement );
+                
 			    PopIndent();
 			    Out("}");
 		    PopIndent();
 		    Out("}");
         return string.Format( "{0}Surface.ST4bby.cs", tableName );
+    }
+
+    private void Out_SurfaceIndexFindMethods( string tableName, IEnumerable<XmlElement> columnList, HashSet<string> methodColumnList, XmlElement tableElement )
+    {
+        //  Find all the indexes for the table.
+        var indexNodeList = ToList( tableElement.SelectNodes( "Indexes/Index" ) ).Cast<XmlElement>();
+
+        //  Loop the indexes and create one Find-method per index.
+        foreach( XmlElement indexElement in indexNodeList )
+        {
+            //  Filter out the columns that are used for this index.
+            //  Note that the table's columns come from tableElement->Columns/Column
+            //  while the index's columns come from indexElement->Columns/Column.
+            var columnsUsedInIndex = 
+                from c in columnList
+                where ToList( indexElement.SelectNodes( "Columns/Column" ) )
+                    .Select( ic => ic.Attributes["Name"].Value ).ToList()
+                    .Contains( c.Attributes["Name"].Value )
+                select c;
+
+            var paramString = string.Join( ",", columnsUsedInIndex.Select( c => c.Attributes["Name"].Value ) );
+            if( methodColumnList.Contains( paramString ) )
+            {
+                Out( "// There is already a method with parameter(s) {0}.  Do you have redundant indexes or foreign keys?", paramString );
+                Out( "" );
+            }
+            else
+            {
+                methodColumnList.Add( paramString );    // Add the new unique string of method parameters.
+
+                // TODO: Create better comment. Xml comments too.
+                // TODO: Comment that this is the method to search via the PK.
+                // TODO: The method should return a single value if the index, like pk, is unique.
+                Out( "// Using index " + indexElement.Attributes["Name"].Value );
+                Out( "// for searching on field(s) " + string.Join( " and ", columnsUsedInIndex.Select( n=>n.Attributes["Name"].Value ) ) + "." );
+                Out_SurfaceFindMethod( tableName, columnsUsedInIndex );
+                Out( "" );
+            }
+        }
+    }
+
+    private void Out_SurfaceForeignKeyFindMethods( string tableName, IEnumerable<XmlElement> columnList, HashSet<string> methodColumnList, XmlElement tableElement )
+    {
+        // Find every FK for the Table.  We want 1 method per FK since every FK can be searched on.
+        var fkNodeList = ToList( tableElement.SelectNodes( "ForeignKeys/ForeignKey" ) ).Cast<XmlElement>();
+
+        //  Loop the foreign keys and create one Find-method per fk.
+        foreach( XmlElement fkElement in fkNodeList )
+        {
+            //  Filter out the columns that are used for this fk.
+            //  Note that the table's columns come from tableElement->Columns/Column
+            //  while the fk's columns come from fkElement->Columns/Column.
+            var columnsUsedInForeignKey = 
+                from c in columnList
+                where ToList( fkElement.SelectNodes( "Columns/Column" ) )
+                    .Select( fkC => fkC.Attributes["Name"].Value ).ToList()
+                    .Contains( c.Attributes["Name"].Value )
+                select c;
+
+            var paramString = string.Join( ",", columnsUsedInForeignKey.Select( c => c.Attributes["Name"].Value ) );
+            if( methodColumnList.Contains( paramString ) )
+            {
+                Out( "// There is already a method with parameter(s) {0}.  Do you have redundant indexes or foreign keys?", paramString );
+                Out( "" );
+            }
+            else
+            {
+                // TODO: Create better comment.  Xml-comment too.                    
+                Out( "// Using foreign key " + fkElement.Attributes["Name"].Value + "." );
+                Out( "// for searching on field(s) " + string.Join( " and ", columnsUsedInForeignKey.Select( n=>n.Attributes["Name"].Value ) ) + "." );
+                Out_SurfaceFindMethod( tableName, columnsUsedInForeignKey );                        
+                Out("");
+            }
+        }
     }
 
     private List<XmlNode> ToList( XmlNodeList nodeList )
