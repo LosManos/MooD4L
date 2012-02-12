@@ -94,24 +94,36 @@
     /// <returns></returns>
    private static string CreateClassSignature( Table table, bool usePartialClass )
    {
-     var ret = "public";
-	if( usePartialClass )
-	{
-		ret += " partial";
-	}
-     return ret + " class " + table.Name;
-   }
-
-   private static string CreateSurfaceClassSignature( string tableName, bool usePartialClass )
-   {
         var ret = "public";
         if( usePartialClass )
         {
             ret += " partial";
         }
+        ret += " class " + table.Name;
+        if( false == string.IsNullOrWhiteSpace( ClassInheritFrom ) )
+        {
+            ret += " : " + ClassInheritFrom;
+        }
+        return ret;
+   }
 
-        // TODO: Add inheritance as a setting.
-        return ret + " class " + tableName + "Surface : SurfaceBase, ISurface";
+    private static string CreateSurfaceClassSignature( string tableName )
+    {
+        // TODO: Should we rewrite CreateClassSignature to look like this one
+        // or should we use more parameters (one per setting) and create a
+        // more generic CreateClassSignature method?
+        var ret = string.Format( 
+            "public {0} class {1}{2}", 
+            UsePartialClass ? " partial" : "", 
+            string.Format( 
+                SurfaceTableNameFormat.IndexOf( "{0}" ) == -1 ? 
+                    "{0}" + SurfaceTableNameFormat : 
+                    SurfaceTableNameFormat, 
+                tableName 
+            ), 
+            string.IsNullOrWhiteSpace( SurfaceClassInheritFrom ) ? "" : " : " + SurfaceClassInheritFrom
+        );
+        return ret;
    }
 
     private static string CreateFileHeader( string commentPrefix, string commentSuffix = null )
@@ -484,7 +496,7 @@
 		    Out( CreateSurfaceNamespaceSignature( namespaceName, UseSchemaForNamespace ) );
 		    Out("{");
 		    PushIndent("\t");
-			    Out( CreateSurfaceClassSignature( tableName, UsePartialClass ) );
+			    Out( CreateSurfaceClassSignature( tableName ) );
 			    Out("{");
 			    PushIndent("\t");
 
