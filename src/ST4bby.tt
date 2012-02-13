@@ -393,7 +393,40 @@
         Out_Text( String.Format(stuff, args) );
     }
 
-    private void Out_SurfaceFindMethod( string tableName, IEnumerable<XmlNode> columnsUsedInForeignKey )
+    private void Out_SurfaceDeleteMethod( string tableName, IEnumerable<XmlNode> columnsUsedInIxFk )
+    {
+        // TODO: Move method signature creator to a method of its own.
+        // TODO: Set schema by parameter, not hard coded as right now.  Schema=
+        // TODO: Set namespace by setting, not hard coded DTO as now.
+        // TODO: Write a comment to the method that deletes by the primary key that it does just that.
+        Out( "public void DeleteBy{0}( {1} )", 
+            string.Join( "And", columnsUsedInIxFk.Select( c => c.Attributes["Name"].Value ) ), 
+            CreateMethodParameterListString( columnsUsedInIxFk )
+            );
+		Out("{");
+        PushIndent("\t");
+            Out_Text( @"
+                using( var conn = CreateConnection() )
+                {{
+                    conn.Open();
+                    conn.Execute( 
+                        {0}, 
+                        {1} );
+                }}", 
+                string.Format( 
+                    "\"delete from {0} where {1}\"", 
+                    tableName, 
+                    CreateQuerySelectEqualParameterListString( columnsUsedInIxFk )
+                ), 
+                string.Format( 
+                    "new {{ {0} }}", 
+                    CreateObjectAssignmentParameterListString( columnsUsedInIxFk ) )
+            );
+        PopIndent();
+		Out("}");
+    }
+
+    private void Out_SurfaceFindMethod( string tableName, IEnumerable<XmlNode> columnsUsedInIxFk )
     {
         // TODO: Move method signature creator to a method of its own.
         // TODO: Set schema by parameter, not hard coded as right now.  Schema=
@@ -401,8 +434,8 @@
         // TODO: Write a comment to the method that selects the primary key that it does just that.  It should also return just 1 record.
         Out( "public List<DTO.{0}> FindBy{1}( {2} )", 
             tableName, 
-            string.Join( "And", columnsUsedInForeignKey.Select( c => c.Attributes["Name"].Value ) ), 
-            CreateMethodParameterListString( columnsUsedInForeignKey )
+            string.Join( "And", columnsUsedInIxFk.Select( c => c.Attributes["Name"].Value ) ), 
+            CreateMethodParameterListString( columnsUsedInIxFk )
             );
 		Out("{");
         PushIndent("\t");
@@ -416,9 +449,9 @@
                     Out( "@\"" );
                     PushIndent("\t");
                         Out( "select * from " + tableName );
-                        Out( "where " + CreateQuerySelectEqualParameterListString( columnsUsedInForeignKey ) + "\"," );
+                        Out( "where " + CreateQuerySelectEqualParameterListString( columnsUsedInIxFk ) + "\"," );
                     PopIndent();
-                    Out( "new { " + CreateObjectAssignmentParameterListString( columnsUsedInForeignKey ) + " } );" );
+                    Out( "new { " + CreateObjectAssignmentParameterListString( columnsUsedInIxFk ) + " } );" );
                 PopIndent();
 			    Out("");
                 Out( "return res.ToList();" );
@@ -540,21 +573,9 @@
             //  Find all colums for the Table.
             var columnList = ToList( tableElement.SelectNodes( "Columns/Column" ) ).Cast<XmlElement>();
 
-            //  We have a problem where an index and a fk points at the same columns.
-            //  In those cases we get two identical methods; which we can't have.
-            //  Each method declares a unique signature due to its parameters.
-            //  The solution is such:
-            //  We store the unique parameters for each method created.  The
-            //  parameters are created from the columns used so if we store the 
-            //  columns we also have a unique identificator of each method.
-            //  Then we make sure the same signature is not used twice.
-            var methodColumnList = new HashSet<string>();
-
-            Out_SurfaceIndexFindMethods( tableName, columnList, methodColumnList, tableElement );
-
-            Out_SurfaceForeignKeyFindMethods( tableName, columnList, methodColumnList, tableElement );
+            Out_SurfaceFindMethods( tableName, tableElement, columnList );
         
-            Out_SurfaceDeleteAllMethod( tableName );
+            Out_SurfaceDeleteMethods( tableName, tableElement, columnList );
                 
 			PopIndent();
 			Out("}");
@@ -562,113 +583,106 @@
 		Out("}");
         return string.Format( "{0}Surface.ST4bby.cs", tableName );
     }
-
-    private void Out_SurfaceIndexFindMethods( string tableName, IEnumerable<XmlElement> columnList, HashSet<string> methodColumnList, XmlElement tableElement )
+    
+    private void Out_SurfaceFindMethods( 
+        string tableName, 
+        XmlElement tableElement, 
+        IEnumerable<XmlElement> columnList )
     {
+        //  We have a problem where an index and a fk points at the same columns.
+        //  In those cases we get two identical methods; which we can't have.
+        //  Each method declares a unique signature due to its parameters.
+        //  The solution is such:
+        //  We store the unique parameters for each method created.  The
+        //  parameters are created from the columns used so if we store the 
+        //  columns we also have a unique identificator of each method.
+        //  Then we make sure the same signature is not used twice.
+        var methodSigList = new HashSet<string>();
+
         //  Start by creating a FindAll method.
         Out_Comment( "This method returns all records in the table " + tableName + "." );
-        // TODO: Set namespace by setting, not hard coded DTO x 2 as now.
         Out_Text( @"
-            public List<DTO.{0}> FindAll()
+            public List<{0}.{1}> FindAll()
             {{
                 using( var conn = CreateConnection() )
                 {{
                     conn.Open();
-                    var res = conn.Query<DTO.{0}>( {1} );
+                    var res = conn.Query<{0}.{1}>( {2} );
                     return res.ToList();
                 }}
             }}", 
+            nameSpaceName, 
             tableName, 
             "\"select * from " + tableName + "\""
         );
         Out( "" );
 
         //  Find all the indexes for the table.
-        var indexNodeList = ToList( tableElement.SelectNodes( "Indexes/Index" ) ).Cast<XmlElement>();
+        var ixNodeList = ToList( tableElement.SelectNodes( "Indexes/Index" ) ).Cast<XmlElement>();
+        Out_SurfaceFindMethods( tableName, tableElement, columnList, ixNodeList, methodSigList );
 
-        //  Loop the indexes and create one Find-method per index.
-        foreach( XmlElement indexElement in indexNodeList )
+        // Find every FK for the Table.  We want 1 method per FK since every FK can be searched on.
+        var fkNodeList = ToList( tableElement.SelectNodes( "ForeignKeys/ForeignKey" ) ).Cast<XmlElement>();
+        Out_SurfaceFindMethods( tableName, tableElement, columnList, fkNodeList, methodSigList );
+    }
+
+    private void Out_SurfaceFindMethods( 
+        string tableName, 
+        XmlElement tableElement, 
+        IEnumerable<XmlElement> columnList, 
+        IEnumerable<XmlElement> ixfkNodeList, 
+        HashSet<string> methodSigList )
+    {
+        //  Loop the indexes/fks and create one Find-method per index or fk.
+        foreach( XmlElement indexElement in ixfkNodeList )
         {
             //  Filter out the columns that are used for this index.
             //  Note that the table's columns come from tableElement->Columns/Column
             //  while the index's columns come from indexElement->Columns/Column.
-            var columnsUsedInIndex = 
-                from c in columnList
-                where ToList( indexElement.SelectNodes( "Columns/Column" ) )
-                    .Select( ic => ic.Attributes["Name"].Value ).ToList()
-                    .Contains( c.Attributes["Name"].Value )
-                select c;
+            var usedColumns = ColumnsFromIndexOrForeignKey( indexElement, columnList );
 
-            var paramString = string.Join( ",", columnsUsedInIndex.Select( c => c.Attributes["Name"].Value ) );
-            if( methodColumnList.Contains( paramString ) )
+            var paramString = CreateMethodSig( usedColumns );
+            if( methodSigList.Contains( paramString ) )
             {
                 Out( "// There is already a method with parameter(s) {0}.  Do you have redundant indexes or foreign keys?", paramString );
                 Out( "" );
             }
             else
             {
-                methodColumnList.Add( paramString );    // Add the new unique string of method parameters.
+                methodSigList.Add( paramString );    // Add the new unique string of method parameters.
 
-                // TODO: Comment that this is the method to search via the PK.
+                // TODO: Comment that this is the method to search via the PK, if it is the pk.
                 // TODO: The method should return a single value if the index, like pk, is unique.
                 Out_Comment( 
                     string.Format( @"This method uses the {1} index{0}for searching of field(s) {2}.", 
                         Environment.NewLine, 
                         indexElement.Attributes["Name"].Value, 
-                        string.Join( " and ", columnsUsedInIndex.Select( n=>n.Attributes["Name"].Value ) )
+                        string.Join( " and ", usedColumns.Select( n=>n.Attributes["Name"].Value ) )
                     ), 
-                    columnsUsedInIndex.Select( c => c.Attributes["Name"].Value ), 
+                    usedColumns.Select( c => c.Attributes["Name"].Value ), 
                     ""
                 );
-                Out_SurfaceFindMethod( tableName, columnsUsedInIndex );
+                Out_SurfaceFindMethod( tableName, usedColumns );
                 Out( "" );
             }
         }
     }
 
-    private void Out_SurfaceForeignKeyFindMethods( string tableName, IEnumerable<XmlElement> columnList, HashSet<string> methodColumnList, XmlElement tableElement )
+    private void Out_SurfaceDeleteMethods( 
+        string tableName, 
+        XmlElement tableElement, 
+        IEnumerable<XmlElement> columnList )
     {
-        // Find every FK for the Table.  We want 1 method per FK since every FK can be searched on.
-        var fkNodeList = ToList( tableElement.SelectNodes( "ForeignKeys/ForeignKey" ) ).Cast<XmlElement>();
+        //  We have a problem where an index and a fk points at the same columns.
+        //  In those cases we get two identical methods; which we can't have.
+        //  Each method declares a unique signature due to its parameters.
+        //  The solution is such:
+        //  We store the unique parameters for each method created.  The
+        //  parameters are created from the columns used so if we store the 
+        //  columns we also have a unique identificator of each method.
+        //  Then we make sure the same signature is not used twice.
+        var methodSigList = new HashSet<string>();
 
-        //  Loop the foreign keys and create one Find-method per fk.
-        foreach( XmlElement fkElement in fkNodeList )
-        {
-            //  Filter out the columns that are used for this fk.
-            //  Note that the table's columns come from tableElement->Columns/Column
-            //  while the fk's columns come from fkElement->Columns/Column.
-            var columnsUsedInForeignKey = 
-                from c in columnList
-                where ToList( fkElement.SelectNodes( "Columns/Column" ) )
-                    .Select( fkC => fkC.Attributes["Name"].Value ).ToList()
-                    .Contains( c.Attributes["Name"].Value )
-                select c;
-
-            var paramString = string.Join( ",", columnsUsedInForeignKey.Select( c => c.Attributes["Name"].Value ) );
-            if( methodColumnList.Contains( paramString ) )
-            {
-                Out( "// There is already a method with parameter(s) {0}.  Do you have redundant indexes or foreign keys?", paramString );
-                Out( "" );
-            }
-            else
-            {
-                Out_Comment( 
-                    string.Format( "This method uses the {1} foreign key{0}for searching of field(s) {2}.", 
-                        Environment.NewLine, 
-                        fkElement.Attributes["Name"].Value, 
-                        string.Join( " and ", columnsUsedInForeignKey.Select( n=>n.Attributes["Name"].Value ) )
-                    ), 
-                    columnsUsedInForeignKey.Select( c => c.Attributes["Name"].Value ), 
-                    ""
-                );
-                Out_SurfaceFindMethod( tableName, columnsUsedInForeignKey );                        
-                Out("");
-            }
-        }
-    }
-
-    private void Out_SurfaceDeleteAllMethod( string tableName )
-    {
         Out_Comment( "This method deletes all records in the " + tableName + " table." );
         Out_Text( @"
             public void DeleteAll()
@@ -679,7 +693,80 @@
                     conn.Execute( {0} );
                 }}
             }}", 
-            "\"delete from " + tableName + "\""  );        
+            "\"delete from " + tableName + "\""  );
+        Out( "" );
+            
+        //  Find all the indexes for the table.
+        var ixNodeList = ToList( tableElement.SelectNodes( "Indexes/Index" ) ).Cast<XmlElement>();
+        Out_SurfaceDeleteMethods( tableName, tableElement, columnList, ixNodeList, methodSigList );
+
+        // Find every FK for the Table.  We want 1 method per FK since every FK can be searched on.
+        var fkNodeList = ToList( tableElement.SelectNodes( "ForeignKeys/ForeignKey" ) ).Cast<XmlElement>();
+        Out_SurfaceDeleteMethods( tableName, tableElement, columnList, fkNodeList, methodSigList );
+        
+    }
+
+    private static IEnumerable<XmlElement> ColumnsFromIndexOrForeignKey(
+        XmlElement indexOrFkElement, 
+        IEnumerable<XmlElement> columnList )
+    {
+        //  Filter out the columns that are used for this index.
+        //  Note that the table's columns come from tableElement->Columns/Column
+        //  while the index's columns come from indexElement->Columns/Column.
+        var usedColumns = 
+            from c in columnList
+            where ToList( indexOrFkElement.SelectNodes( "Columns/Column" ) )
+                .Select( ic => ic.Attributes["Name"].Value ).ToList()
+                .Contains( c.Attributes["Name"].Value )
+            select c;
+        return usedColumns;
+    }
+
+    private string CreateMethodSig( IEnumerable<XmlElement> usedColumns )
+    {
+        return string.Join( ",", usedColumns.Select( c => c.Attributes["Name"].Value ) );
+     }
+
+    private void Out_SurfaceDeleteMethods( 
+        string tableName, 
+        XmlElement tableElement, 
+        IEnumerable<XmlElement> columnList, 
+        IEnumerable<XmlElement> ixfkNodeList, 
+        HashSet<string> methodSigList )
+    {
+        //  Loop the indexes/fks and create one Find-method per index or fk.
+        foreach( XmlElement indexElement in ixfkNodeList )
+        {
+            //  Filter out the columns that are used for this index.
+            //  Note that the table's columns come from tableElement->Columns/Column
+            //  while the index's columns come from indexElement->Columns/Column.
+            var usedColumns = ColumnsFromIndexOrForeignKey( indexElement, columnList );
+
+            var paramString = CreateMethodSig( usedColumns );
+            if( methodSigList.Contains( paramString ) )
+            {
+                Out( "// There is already a method with parameter(s) {0}.  Do you have redundant indexes or foreign keys?", paramString );
+                Out( "" );
+            }
+            else
+            {
+                methodSigList.Add( paramString );    // Add the new unique string of method parameters.
+
+
+                // TODO: Comment that this is the method to delete via the PK, if the isfk is the pk/unique.
+                Out_Comment( 
+                    string.Format( @"This method uses the {1} index/fk{0}for deleting a record.  Filtering is dune by field(s) {2}.", 
+                        Environment.NewLine, 
+                        indexElement.Attributes["Name"].Value, 
+                        string.Join( " and ", usedColumns.Select( n=>n.Attributes["Name"].Value ) )
+                    ), 
+                    usedColumns.Select( c => c.Attributes["Name"].Value ), 
+                    ""
+                );
+                Out_SurfaceDeleteMethod( tableName, usedColumns );
+                Out( "" );
+            }
+        }
     }
 
     private void Out_Comment( string summaryText, IEnumerable<string> parameterList = null, string returnText = null )
@@ -717,7 +804,7 @@
         }
     }
 
-    private List<XmlNode> ToList( XmlNodeList nodeList )
+    private static List<XmlNode> ToList( XmlNodeList nodeList )
     {
         // I would have preferred to use AsQueryable as MSDN says.  But I can't get it to work. /OF
         //  http://msdn.microsoft.com/en-us/library/system.xml.xmlnodelist.aspx
