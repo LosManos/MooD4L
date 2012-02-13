@@ -138,6 +138,11 @@
                 commentSuffix );
     }
 
+    private string CreateMethodSig( IEnumerable<XmlElement> usedColumns )
+    {
+        return string.Join( ",", usedColumns.Select( c => c.Attributes["Name"].Value ) );
+     }
+
 	/// <summary> This method creates the namespace signature.
 	/// </summary>
 	/// <param name="namespaceName"></param>
@@ -184,14 +189,27 @@
         return String.Format("{0} {1}", String.Format(typeFormat,type), parameterName);
     }
 
-    private static IEnumerable<string> CreateMethodParameterList( IEnumerable<XmlNode> nodeList )
+    private static IEnumerable<string> CreateMethodParameterList( 
+        IEnumerable<XmlNode> nodeList, 
+        bool includePrimaryKey = true )
     {
-        return nodeList.Select( c => CreateMethodParameter( c ) );
+        if( includePrimaryKey )
+        {
+            return nodeList.Select( c => CreateMethodParameter( c ) );
+        }
+        else
+        {
+            return nodeList
+                .Where( c => bool.Parse( c.Attributes["IsPrimaryKey"].Value ) == false )
+                .Select( c => CreateMethodParameter( c ) );
+        }
     }
 
-    private static string CreateMethodParameterListString( IEnumerable<XmlNode> nodeList )
+    private static string CreateMethodParameterListString( 
+        IEnumerable<XmlNode> nodeList, 
+        bool includePrimaryKey = true )
     {
-        return string.Join( ", ", CreateMethodParameterList( nodeList ) );
+        return string.Join( ", ", CreateMethodParameterList( nodeList, includePrimaryKey ) );
     }
 
     private static string CreateQuerySelectEqualParameter( XmlNode node )
@@ -201,6 +219,16 @@
             node.Attributes["Name"].Value
         );
     }
+	
+	private static string CreateQueryInsertParameterListString( IEnumerable<XmlElement> columnList )
+	{
+		return string.Join( ", ", columnList.Select( c => c.Attributes["Name"].Value ) );
+	}
+
+	private static string CreateQueryInsertParameterListStringWithAtSign( IEnumerable<XmlElement> columnList )
+	{
+		return string.Join( ", ", columnList.Select( c => "@" + c.Attributes["Name"].Value ) );
+	}
 
     private static IEnumerable<string> CreateQuerySelectEqualParameterList( IEnumerable<XmlNode> nodeList )
     {
@@ -209,7 +237,7 @@
 
     private static string CreateQuerySelectEqualParameterListString( IEnumerable<XmlNode> nodeList )
     {
-        return string.Join( " && ", CreateQuerySelectEqualParameterList( nodeList ) );
+        return string.Join( " and ", CreateQuerySelectEqualParameterList( nodeList ) );
     }
 
     private static string CreateObjectAssignmentParameter( XmlNode node )
@@ -426,41 +454,6 @@
 		Out("}");
     }
 
-    private void Out_SurfaceFindMethod( string tableName, IEnumerable<XmlNode> columnsUsedInIxFk )
-    {
-        // TODO: Move method signature creator to a method of its own.
-        // TODO: Set schema by parameter, not hard coded as right now.  Schema=
-        // TODO: Set namespace by setting, not hard coded DTO as now.
-        // TODO: Write a comment to the method that selects the primary key that it does just that.  It should also return just 1 record.
-        Out( "public List<DTO.{0}> FindBy{1}( {2} )", 
-            tableName, 
-            string.Join( "And", columnsUsedInIxFk.Select( c => c.Attributes["Name"].Value ) ), 
-            CreateMethodParameterListString( columnsUsedInIxFk )
-            );
-		Out("{");
-        PushIndent("\t");
-            Out( "using( var conn = CreateConnection()) ");
-            Out( "{" );
-            PushIndent("\t");
-                Out( "conn.Open();" );
-                // TODO: Set namespace by parameter on the return class.
-                Out( "var res = conn.Query<DTO." + tableName + ">(" );
-                PushIndent("\t");
-                    Out( "@\"" );
-                    PushIndent("\t");
-                        Out( "select * from " + tableName );
-                        Out( "where " + CreateQuerySelectEqualParameterListString( columnsUsedInIxFk ) + "\"," );
-                    PopIndent();
-                    Out( "new { " + CreateObjectAssignmentParameterListString( columnsUsedInIxFk ) + " } );" );
-                PopIndent();
-			    Out("");
-                Out( "return res.ToList();" );
-            PopIndent();
-            Out( "}" );
-        PopIndent();
-		Out("}");
-    }
-
     string SaveOutput(string outputFileName)
     {
         // By some reason unknown to me the file the string contains a leading whitespace.  Hence the Trim.
@@ -573,8 +566,12 @@
             //  Find all colums for the Table.
             var columnList = ToList( tableElement.SelectNodes( "Columns/Column" ) ).Cast<XmlElement>();
 
+            Out_SurfaceInsertMethods( tableName, tableElement, columnList );
+
             Out_SurfaceFindMethods( tableName, tableElement, columnList );
         
+            Out_SurfaceUpdateMethods( tableName, tableElement, columnList );
+
             Out_SurfaceDeleteMethods( tableName, tableElement, columnList );
                 
 			PopIndent();
@@ -668,6 +665,155 @@
         }
     }
 
+    private void Out_SurfaceFindMethod( string tableName, IEnumerable<XmlNode> columnsUsedInIxFk )
+    {
+        // TODO: Move method signature creator to a method of its own.
+        // TODO: Set schema by parameter, not hard coded as right now.  Schema=
+        // TODO: Set namespace by setting, not hard coded DTO as now.
+        // TODO: Write a comment to the method that selects the primary key that it does just that.  It should also return just 1 record.
+        Out( "public List<DTO.{0}> FindBy{1}( {2} )", 
+            tableName, 
+            string.Join( "And", columnsUsedInIxFk.Select( c => c.Attributes["Name"].Value ) ), 
+            CreateMethodParameterListString( columnsUsedInIxFk )
+            );
+		Out("{");
+        PushIndent("\t");
+            Out( "using( var conn = CreateConnection()) ");
+            Out( "{" );
+            PushIndent("\t");
+                Out( "conn.Open();" );
+                // TODO: Set namespace by parameter on the return class.
+                Out( "var res = conn.Query<DTO." + tableName + ">(" );
+                PushIndent("\t");
+                    Out( "@\"" );
+                    PushIndent("\t");
+                        Out( "select * from " + tableName );
+                        Out( "where " + CreateQuerySelectEqualParameterListString( columnsUsedInIxFk ) + "\"," );
+                    PopIndent();
+                    Out( "new { " + CreateObjectAssignmentParameterListString( columnsUsedInIxFk ) + " } );" );
+                PopIndent();
+			    Out("");
+                Out( "return res.ToList();" );
+            PopIndent();
+            Out( "}" );
+        PopIndent();
+		Out("}");
+    }
+
+    private void Out_SurfaceInsertMethods( 
+        string tableName, 
+        XmlElement tableElement, 
+        IEnumerable<XmlElement> columnList )
+    {
+		Out_SurfaceInsertMethod(
+			tableName, 
+			tableElement, 
+			columnList.Where( c => bool.Parse( c.Attributes["IsPrimaryKey"].Value ) == false )
+		);
+    }
+	
+    private void Out_SurfaceInsertMethod( 
+        string tableName, 
+        XmlElement tableElement, 
+        IEnumerable<XmlElement> columnList )
+    {
+		// TODO: Move method signature creator to a method of its own.
+        // TODO: Set schema by parameter, not hard coded as right now.  Schema=
+        // TODO: Set namespace by setting, not hard coded DTO as now.
+        Out_Comment(
+            "This method inserts every field in the " + tableName + " table" +
+            " exclusive the primary key(s).", 
+            columnList.Select( c => c.Attributes["Name"].Value )
+        );
+        Out_Text( "public int Insert( {0} )", 
+        	CreateMethodParameterListString( columnList )
+        );
+        Out( "{" );
+		PushIndent( "\t" );
+            Out( "using( var conn = CreateConnection() )");
+            Out( "{" );
+		    PushIndent( "\t" );
+		        Out( "conn.Open();" );
+                Out( "conn.Execute( @\"" );
+			    PushIndent( "\t" );
+			        Out( "insert into " + tableName );
+			        Out( "( " + CreateQueryInsertParameterListString( columnList ) + " )" );
+			        Out( "values( " + CreateQueryInsertParameterListStringWithAtSign( columnList ) + " )\"," );
+					Out( 
+	                string.Format( 
+	                    "new {{ {0} }}", 
+	                    CreateObjectAssignmentParameterListString( columnList ) )
+					);
+	            PopIndent();
+				Out( ");");
+		        Out( "var res = conn.Query<float>( " );
+			    PushIndent( "\t" );
+			        Out( "\"select @@identity\"" );
+	            PopIndent();
+		        Out( ");" );
+		        Out( "return (int)res.Single();");
+            PopIndent();
+		    Out( "}" );
+        PopIndent();
+		Out( "}" );
+        Out( "" );
+	}
+	
+    private void Out_SurfaceUpdateMethods(
+        string tableName, 
+        XmlElement tableElement, 
+        IEnumerable<XmlElement> columnList )
+    {
+        Out_SurfaceUpdateMethod( tableName, tableElement, 
+            columnList.Where( c => bool.Parse( c.Attributes["IsPrimaryKey"].Value ) == false ), 
+            false
+        );
+        Out_SurfaceUpdateMethod( tableName, tableElement, columnList, true );
+    }
+
+    private void Out_SurfaceUpdateMethod(
+        string tableName, 
+        XmlElement tableElement, 
+        IEnumerable<XmlElement> columnList, 
+        bool includePrimaryKey )
+    {
+        // TODO: Move method signature creator to a method of its own.
+        // TODO: Set schema by parameter, not hard coded as right now.  Schema=
+        // TODO: Set namespace by setting, not hard coded DTO as now.
+		// TODO: Make it possible to set setting for reading the record after writing it.
+        Out_Comment(
+            "This method updates every field in the " + tableName + " table" +
+            ( includePrimaryKey ? "." : " exclusive the primary key(s)." ), 
+            columnList.Select( c => c.Attributes["Name"].Value )
+        );
+        Out( "public void Update( {0} )", 
+            CreateMethodParameterListString( columnList )
+        );
+        Out( "{" );
+        PushIndent( "\t" );
+            Out_Text( @"
+                using( var conn = CreateConnection() )
+                {{
+                    conn.Open();
+                    conn.Execute(
+                        {0},
+                        {1} );
+                }}", 
+                string.Format( 
+                    "\"update {1} set {2}\"", 
+                    Environment.NewLine, 
+                    tableName, 
+                    CreateQuerySelectEqualParameterListString( columnList )
+                    ), 
+                string.Format( 
+                    "new {{ {0} }}", 
+                    CreateObjectAssignmentParameterListString( columnList ) )
+             );
+        PopIndent();
+        Out( "}" );
+        Out( "" );
+    }
+
     private void Out_SurfaceDeleteMethods( 
         string tableName, 
         XmlElement tableElement, 
@@ -721,11 +867,6 @@
             select c;
         return usedColumns;
     }
-
-    private string CreateMethodSig( IEnumerable<XmlElement> usedColumns )
-    {
-        return string.Join( ",", usedColumns.Select( c => c.Attributes["Name"].Value ) );
-     }
 
     private void Out_SurfaceDeleteMethods( 
         string tableName, 
