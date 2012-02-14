@@ -107,11 +107,12 @@ namespace DataLayer.Surface
             return new CTX(_conn, _trans);
         }
 
-        /// <summary>This method create a new connection if necessary.
+        /// <summary>This method creates a new connection if necessary.
         /// </summary>
         private void CreateOrUseConnection()
         {
-            _conn = _conn ?? new SqlConnection(Properties.Settings.Default.ConnString);
+            //_conn = _conn ?? new SqlConnection(Properties.Settings.Default.ConnString);
+            _conn = _conn ?? new SqlConnection( "MooD4L" );
         }
 
     }

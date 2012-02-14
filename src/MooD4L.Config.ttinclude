@@ -1,4 +1,4 @@
-<#@ template language="C#" hostspecific="true" Debug="false" #>
+﻿<#@ template language="C#" hostspecific="true" Debug="false" #>
 <#@ Assembly Name="System.Data" #>
 <#@ Assembly Name="System.Configuration" #>
 <#@ Assembly Name="System.Web" #>
@@ -10,6 +10,7 @@
 <#+
 
     // CONFIGURE YOUR DATABASE SETTINGS HERE
+
 
     string nameSpaceName                = @"";
     string serverName                   = @".\sqlexpress";
@@ -48,12 +49,22 @@
 
     // The format for the surface class name.
     // Leave blank if the class name should be the same as the table's.
-    // Use {0] for inserting the table's name; string.Format is used by ST4bby.
+    // Use {0} for inserting the table's name; string.Format is used by MooD4L.
     // E.g. for a table called Customer:
     // "" => "Customer"
     // "Surf" => "CustomerSurf"
     // "The{0}Class" => "TheCustomerClass"
-    const string SurfaceTableNameFormat = "";
+    const string SurfaceClassNameFormat = "";
+
+    // The format for the surface file name.
+    // Leave blank if the file name should be the same as the table's.  But don't
+	// since we want a trailing .cs for the compiler to work.
+    // Use {0} for inserting the table's name; string.Format is used by MooDAL.
+    // E.g. for a table called Customer:
+    // ".cs" => "Customer.cs"
+    // "Surf.cs" => "CustomerSurf.cs"
+    // "The{0}Class.cs" => "TheCustomerClass.cs"
+    const string SurfaceFileNameFormat = "{0}Surface.MooD4L.cs";
 
     // Set whether the surface class should inherit or implement an interface or two.
     // Leave blank no inheritance or interface implementing is to be created.
