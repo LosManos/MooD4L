@@ -784,13 +784,11 @@
         Out( "{" );
         PushIndent( "\t" );
             Out_Text( @"
-                using( var conn = CreateConnection() )
-                {{
-                    conn.Open();
-                    conn.Execute(
-                        {0},
-                        {1} );
-                }}", 
+				var ctx = MakeConnectionAndTransaction();
+				ctx.Conn.Execute(
+					{0},
+					{1}, 
+					ctx.Trans);", 
                 string.Format( 
                     "\"update {1} set {2}\"", 
                     Environment.NewLine, 
