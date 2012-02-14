@@ -72,6 +72,16 @@
     // "The{0}Class.cs" => "TheCustomerClass.cs"
     const string SurfaceFileNameFormat = "{0}Surface.MooD4L.cs";
 
+    // The format for the surface file name.
+    // Leave blank if the file name should be the same as the table's.  But don't
+    // since we want a trailing .cs for the compiler to work.
+    // Use {0} for inserting the table's name; string.Format is used by MooDAL.
+    // E.g. for a table called Customer:
+    // ".cs" => "Customer.cs"
+    // "Surf.cs" => "CustomerSurf.cs"
+    // "The{0}Class.cs" => "TheCustomerClass.cs"
+    const string SurfaceFileNameFormat = "{0}Surface.MooD4L.cs";
+
     /// <summary>Path for where the Surface classes are written.  The path is relative to the
     /// MooD4L.tt file.
     /// E.g.: "Surface" creates all Surface classes in the subfolder Surface.

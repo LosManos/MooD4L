@@ -51,7 +51,7 @@
                 if ( IsClassOkToGenerate( table ) )
                 {
                     OutputClass(nameSpaceName, table);
-                    var path = SaveOutput( Path.Combine( DTOOutputPath, table.Name + ".cs" ) );
+                    var path = SaveOutput( Path.Combine( DTOOutputPath, string.Format( DTOFileNameFormat, table.Name ) ) );
                     // total hack but it adds the newly written file into the current visual studio instance
                     var project = GetCurrentProject();
 
