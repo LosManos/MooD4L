@@ -184,7 +184,9 @@
     {
         var isNullable = bool.Parse( node.Attributes["IsNullable"].Value );
         var parameterName = node.Attributes["Name"].Value;
-        var type = TypeMappings.ContainsKey( parameterName ) ? TypeMappings[parameterName] : "string";
+		var parameterType = node.Attributes["DotnetType"].Value;
+        var type = TypeMappings.ContainsKey( parameterType ) ? 
+			TypeMappings[parameterType] : "string";
         var typeFormat       = type != "string" && isNullable ? "Nullable<{0}>" : "{0}";
         return String.Format("{0} {1}", String.Format(typeFormat,type), parameterName);
     }
