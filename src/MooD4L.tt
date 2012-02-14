@@ -39,13 +39,19 @@
             textReader.Close();
             // TODO: Change namespace parameter to constant.
             OutputSurface( "DataLayer.Surface", xmldoc );
-            
+      
+			//	Create DTO class output directory if needed.
+			var dtoClassOutputDirectory = Path.Combine( Path.GetDirectoryName(Host.TemplateFile), DTOOutputPath );
+			if( false == Directory.Exists( dtoClassOutputDirectory ) ){
+				Directory.CreateDirectory( dtoClassOutputDirectory );
+			}
+						
             foreach (Table table in tables)
             {
                 if ( IsClassOkToGenerate( table ) )
                 {
                     OutputClass(nameSpaceName, table);
-                    var path = SaveOutput(table.Name + ".cs");
+                    var path = SaveOutput( Path.Combine( DTOOutputPath, table.Name + ".cs" ) );
                     // total hack but it adds the newly written file into the current visual studio instance
                     var project = GetCurrentProject();
 
@@ -535,14 +541,20 @@
 
     private void OutputSurface( string namespaceName, XmlDocument document )
     {
-        // We don't handle schema so to tables with the same name, in different schemas, 
+		//	Create Surface class output directory if needed.
+		var surfaceClassOutputDirectory = Path.Combine( Path.GetDirectoryName(Host.TemplateFile), SurfaceOutputPath );
+		if( false == Directory.Exists( surfaceClassOutputDirectory ) ){
+			Directory.CreateDirectory( surfaceClassOutputDirectory );
+		}
+
+        // We don't handle schema so two tables with the same name, in different schemas, 
         // will mess up the code generation.
         var root = document.DocumentElement;
         var nodeList = root.SelectNodes( "/Database/Tables/Table[@Include=\"True\"]" );
         foreach( XmlElement node in nodeList )
         {
             var fileName = OutputSurfaceFile( namespaceName, node );
-            var surfacePathFile = SaveOutput( fileName );
+            var surfacePathFile = SaveOutput( Path.Combine( surfaceClassOutputDirectory, fileName ) );
             AddFileToProject( surfacePathFile );
         }
     }

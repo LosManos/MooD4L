@@ -11,7 +11,6 @@
 
     // CONFIGURE YOUR DATABASE SETTINGS HERE
 
-
     string nameSpaceName                = @"";
     string serverName                   = @".\sqlexpress";
     string databaseName                 = @"";
@@ -28,6 +27,13 @@
     // Regex filter for the tables that are excluded from code generation.
     // E.g.: "Applications|aspnet_.*" excludes the tables one gets with aspnet authentication.
     const string ExcludeTablesRegex = "";
+
+    /// <summary>Path for where the DTO classes are written.  The path is relative to the
+    /// MooD4L.tt file.
+    /// E.g.: "DTO" creates all DTO classes in the subfolder DTO.
+    /// "" creates al DTO classes in the same folder as the MooD4L.tt file.
+    /// </summary>
+    const string 	DTOOutputPath = "DTO";
 
     //	Set to true for making partial class.
     const bool UsePartialClass = true;
@@ -65,6 +71,13 @@
     // "Surf.cs" => "CustomerSurf.cs"
     // "The{0}Class.cs" => "TheCustomerClass.cs"
     const string SurfaceFileNameFormat = "{0}Surface.MooD4L.cs";
+
+    /// <summary>Path for where the Surface classes are written.  The path is relative to the
+    /// MooD4L.tt file.
+    /// E.g.: "Surface" creates all Surface classes in the subfolder Surface.
+    /// "" creates al Surface classes in the same folder as the MooD4L.tt file.
+    /// </summary>
+    const string SurfaceOutputPath = "Surface";
 
     // Set whether the surface class should inherit or implement an interface or two.
     // Leave blank no inheritance or interface implementing is to be created.
