@@ -404,7 +404,12 @@
 
         // First find the amount of indentation the first line of the source text has.  We must
         // remove this indentation from every row before outputting.
-        var indentCount = stuffList.First().ToCharArray().TakeWhile( c => c == ' ' ).Count();
+		//	We must also decide if there are leading tabs or spaces.  We prefer spacex4 in 
+		//	this file but sometimes a tab creeps in.
+        var charIndentCount = stuffList.First().ToCharArray().TakeWhile( c => c == ' ' ).Count();
+        var tabIndentCount = stuffList.First().ToCharArray().TakeWhile( c => c == '\t' ).Count();
+		var indentCount = Math.Max( charIndentCount, tabIndentCount );
+		
         foreach( string t in stuffList )
         {
             if( t.Length >= indentCount )
@@ -678,28 +683,19 @@
             string.Join( "And", columnsUsedInIxFk.Select( c => c.Attributes["Name"].Value ) ), 
             CreateMethodParameterListString( columnsUsedInIxFk )
             );
-		Out("{");
-        PushIndent("\t");
-            Out( "using( var conn = CreateConnection()) ");
-            Out( "{" );
-            PushIndent("\t");
-                Out( "conn.Open();" );
-                // TODO: Set namespace by parameter on the return class.
-                Out( "var res = conn.Query<DTO." + tableName + ">(" );
-                PushIndent("\t");
-                    Out( "@\"" );
-                    PushIndent("\t");
-                        Out( "select * from " + tableName );
-                        Out( "where " + CreateQuerySelectEqualParameterListString( columnsUsedInIxFk ) + "\"," );
-                    PopIndent();
-                    Out( "new { " + CreateObjectAssignmentParameterListString( columnsUsedInIxFk ) + " } );" );
-                PopIndent();
-			    Out("");
-                Out( "return res.ToList();" );
-            PopIndent();
-            Out( "}" );
-        PopIndent();
-		Out("}");
+		Out_Text( @"
+			{{
+				var ctx = MakeConnectionAndTransaction();
+				var res = ctx.Conn.Query<DTO.{0}>( 
+					{1},
+					{2},
+					transaction: ctx.Trans );
+				return res.ToList();
+			}}", 
+				tableName, 
+				"\"select * from " + tableName + " where " + CreateQuerySelectEqualParameterListString( columnsUsedInIxFk ) + "\"", 
+                "new { " + CreateObjectAssignmentParameterListString( columnsUsedInIxFk ) + " }"
+			);
     }
 
     private void Out_SurfaceInsertMethods( 
@@ -730,35 +726,29 @@
         Out_Text( "public int Insert( {0} )", 
         	CreateMethodParameterListString( columnList )
         );
-        Out( "{" );
-		PushIndent( "\t" );
-            Out( "using( var conn = CreateConnection() )");
-            Out( "{" );
-		    PushIndent( "\t" );
-		        Out( "conn.Open();" );
-                Out( "conn.Execute( @\"" );
-			    PushIndent( "\t" );
-			        Out( "insert into " + tableName );
-			        Out( "( " + CreateQueryInsertParameterListString( columnList ) + " )" );
-			        Out( "values( " + CreateQueryInsertParameterListStringWithAtSign( columnList ) + " )\"," );
-					Out( 
-	                string.Format( 
-	                    "new {{ {0} }}", 
-	                    CreateObjectAssignmentParameterListString( columnList ) )
-					);
-	            PopIndent();
-				Out( ");");
-		        Out( "var res = conn.Query<float>( " );
-			    PushIndent( "\t" );
-			        Out( "\"select @@identity\"" );
-	            PopIndent();
-		        Out( ");" );
-		        Out( "return (int)res.Single();");
-            PopIndent();
-		    Out( "}" );
-        PopIndent();
-		Out( "}" );
-        Out( "" );
+		
+		Out_Text( @"
+			{{
+				var ctx = MakeConnectionAndTransaction();
+				ctx.Conn.Execute( 
+					{0}, 
+					{1},
+					ctx.Trans
+				);
+				var res = ctx.Conn.Query<float>(
+					{2},
+					ctx.Trans
+				);
+				return (int)res.Single();
+			}}"
+		, 
+			"\"insert into " + tableName +
+				" ( " + CreateQueryInsertParameterListString( columnList ) + " )" +
+				" values( " + CreateQueryInsertParameterListStringWithAtSign( columnList ) + " )\"",
+			"new { " + CreateObjectAssignmentParameterListString( columnList ) + "}", 
+			"\"select @@identity\""
+		);
+		Out( "" );
 	}
 	
     private void Out_SurfaceUpdateMethods(
