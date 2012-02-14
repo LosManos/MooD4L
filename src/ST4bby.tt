@@ -441,13 +441,11 @@
 		Out("{");
         PushIndent("\t");
             Out_Text( @"
-                using( var conn = CreateConnection() )
-                {{
-                    conn.Open();
-                    conn.Execute( 
-                        {0}, 
-                        {1} );
-                }}", 
+                var ctx = MakeConnectionAndTransaction();
+                ctx.Conn.Open();
+                ctx.Conn.Execute( 
+                    {0}, 
+                    {1} );", 
                 string.Format( 
                     "\"delete from {0} where {1}\"", 
                     tableName, 
