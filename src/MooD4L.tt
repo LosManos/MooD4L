@@ -97,10 +97,10 @@
     /// <param name="table"></param>
     /// <param name="usePartialClass"></param>
     /// <returns></returns>
-   private static string CreateClassSignature( Table table, bool usePartialClass )
+   private static string CreateDTOClassSignature( Table table )
    {
         var ret = "public";
-        if( usePartialClass )
+        if( DTOUsePartialClass )
         {
             ret += " partial";
         }
@@ -114,9 +114,6 @@
 
     private static string CreateSurfaceClassSignature( string tableName )
     {
-        // TODO: Should we rewrite CreateClassSignature to look like this one
-        // or should we use more parameters (one per setting) and create a
-        // more generic CreateClassSignature method?
         var ret = string.Format( 
             "public {0} class {1}{2}", 
             DTOUsePartialClass ? " partial" : "", 
@@ -437,7 +434,6 @@
     {
         // TODO: Move method signature creator to a method of its own.
         // TODO: Set schema by parameter, not hard coded as right now.  Schema=
-        // TODO: Set namespace by setting, not hard coded DTO as now.
         // TODO: Write a comment to the method that deletes by the primary key that it does just that.
         Out( "public void DeleteBy{0}( {1} )", 
             string.Join( "And", columnsUsedInIxFk.Select( c => c.Attributes["Name"].Value ) ), 
@@ -491,7 +487,7 @@
 			Out("using System;");
 			Out("using System.ComponentModel.DataAnnotations;");
 			Out( "" );
-			Out( CreateClassSignature( table, DTOUsePartialClass ) );
+			Out( CreateDTOClassSignature( table ) );
 			Out("{");
 			PushIndent("\t");
 				//	Properties.
@@ -687,7 +683,8 @@
         // TODO: Set schema by parameter, not hard coded as right now.  Schema=
         // TODO: Set namespace by setting, not hard coded DTO as now.
         // TODO: Write a comment to the method that selects the primary key that it does just that.  It should also return just 1 record.
-        Out( "public List<DTO.{0}> FindBy{1}( {2} )", 
+        Out( "public List<{0}.{1}> FindBy{2}( {3} )", 
+			DTONameSpaceName, 
             tableName, 
             string.Join( "And", columnsUsedInIxFk.Select( c => c.Attributes["Name"].Value ) ), 
             CreateMethodParameterListString( columnsUsedInIxFk )
@@ -695,12 +692,13 @@
 		Out_Text( @"
 			{{
 				var ctx = MakeConnectionAndTransaction();
-				var res = ctx.Conn.Query<DTO.{0}>( 
-					{1},
+				var res = ctx.Conn.Query<{0}.{1}>( 
 					{2},
+					{3},
 					transaction: ctx.Trans );
 				return res.ToList();
 			}}", 
+				DTONameSpaceName, 
 				tableName, 
 				"\"select * from " + tableName + " where " + CreateQuerySelectEqualParameterListString( columnsUsedInIxFk ) + "\"", 
                 "new { " + CreateObjectAssignmentParameterListString( columnsUsedInIxFk ) + " }"
