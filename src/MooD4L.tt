@@ -611,16 +611,19 @@
         //  Start by creating a FindAll method.
         Out_Comment( "This method returns all records in the table " + tableName + "." );
         Out_Text( @"
-            public List<{0}.{1}> FindAll()
+            public List<{0}.{1}{2}> FindAll()
             {{
                 using( var conn = CreateConnection() )
                 {{
                     conn.Open();
-                    var res = conn.Query<{0}.{1}>( {2} );
+                    var res = conn.Query<{0}.{1}{2}>( {3} );
                     return res.ToList();
                 }}
             }}", 
             DTONameSpaceName, 
+			UseSchemaForNamespace ?
+				tableElement.Attributes[ "Schema" ].Value + "." :
+				"", 
             tableName, 
             "\"select * from " + tableName + "\""
         );
@@ -671,20 +674,27 @@
                     usedColumns.Select( c => c.Attributes["Name"].Value ), 
                     ""
                 );
-                Out_SurfaceFindMethod( tableName, usedColumns );
+                Out_SurfaceFindMethod( 
+					tableName, 
+					UseSchemaForNamespace ?
+						tableElement.Attributes[ "Schema" ].Value :
+						null, 
+					usedColumns );
                 Out( "" );
             }
         }
     }
 
-    private void Out_SurfaceFindMethod( string tableName, IEnumerable<XmlNode> columnsUsedInIxFk )
+    private void Out_SurfaceFindMethod( string tableName, string schemaName, IEnumerable<XmlNode> columnsUsedInIxFk )
     {
         // TODO: Move method signature creator to a method of its own.
         // TODO: Set schema by parameter, not hard coded as right now.  Schema=
-        // TODO: Set namespace by setting, not hard coded DTO as now.
         // TODO: Write a comment to the method that selects the primary key that it does just that.  It should also return just 1 record.
-        Out( "public List<{0}.{1}> FindBy{2}( {3} )", 
-			DTONameSpaceName, 
+        Out( "public List<{0}{1}{2}> FindBy{3}( {4} )", 
+			DTONameSpaceName + ".", 
+			UseSchemaForNamespace ?
+				schemaName + "." :
+				"", 
             tableName, 
             string.Join( "And", columnsUsedInIxFk.Select( c => c.Attributes["Name"].Value ) ), 
             CreateMethodParameterListString( columnsUsedInIxFk )
@@ -692,13 +702,16 @@
 		Out_Text( @"
 			{{
 				var ctx = MakeConnectionAndTransaction();
-				var res = ctx.Conn.Query<{0}.{1}>( 
-					{2},
+				var res = ctx.Conn.Query<{0}.{1}{2}>( 
 					{3},
+					{4},
 					transaction: ctx.Trans );
 				return res.ToList();
 			}}", 
 				DTONameSpaceName, 
+				UseSchemaForNamespace ?
+					schemaName + "." :
+					"", 
 				tableName, 
 				"\"select * from " + tableName + " where " + CreateQuerySelectEqualParameterListString( columnsUsedInIxFk ) + "\"", 
                 "new { " + CreateObjectAssignmentParameterListString( columnsUsedInIxFk ) + " }"
@@ -778,8 +791,7 @@
     {
         // TODO: Move method signature creator to a method of its own.
         // TODO: Set schema by parameter, not hard coded as right now.  Schema=
-        // TODO: Set namespace by setting, not hard coded DTO as now.
-		// TODO: Make it possible to set setting for reading the record after writing it.
+		// TODO: Make it possible to set setting for reading the record after writing it. Issue #4.
         Out_Comment(
             "This method updates every field in the " + tableName + " table" +
             ( includePrimaryKey ? "." : " exclusive the primary key(s)." ), 
@@ -890,8 +902,6 @@
             {
                 methodSigList.Add( paramString );    // Add the new unique string of method parameters.
 
-
-                // TODO: Comment that this is the method to delete via the PK, if the isfk is the pk/unique.
                 Out_Comment( 
                     string.Format( @"This method uses the {1} index/fk{0}for deleting a record.  Filtering is dune by field(s) {2}.", 
                         Environment.NewLine, 
@@ -937,7 +947,7 @@
         //  Print the Returns part.
         if( returnText != null )
         {
-            // TODO: Create a proper return text split as with Summary.
+            // TODO: Create a proper return text split as with Summary.  Issue #2.
             Out( "/// <returns>" + returnText + "</returns>" );
         }
     }
