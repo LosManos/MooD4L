@@ -430,36 +430,6 @@
         Out_Text( String.Format(stuff, args) );
     }
 
-    private void Out_SurfaceDeleteMethod( string tableName, IEnumerable<XmlNode> columnsUsedInIxFk )
-    {
-        // TODO: Move method signature creator to a method of its own.
-        // TODO: Set schema by parameter, not hard coded as right now.  Schema=
-        // TODO: Write a comment to the method that deletes by the primary key that it does just that.
-        Out( "public void DeleteBy{0}( {1} )", 
-            string.Join( "And", columnsUsedInIxFk.Select( c => c.Attributes["Name"].Value ) ), 
-            CreateMethodParameterListString( columnsUsedInIxFk )
-            );
-		Out("{");
-        PushIndent("\t");
-            Out_Text( @"
-                var ctx = MakeConnectionAndTransaction();
-                ctx.Conn.Open();
-                ctx.Conn.Execute( 
-                    {0}, 
-                    {1} );", 
-                string.Format( 
-                    "\"delete from {0} where {1}\"", 
-                    tableName, 
-                    CreateQuerySelectEqualParameterListString( columnsUsedInIxFk )
-                ), 
-                string.Format( 
-                    "new {{ {0} }}", 
-                    CreateObjectAssignmentParameterListString( columnsUsedInIxFk ) )
-            );
-        PopIndent();
-		Out("}");
-    }
-
     string SaveOutput(string outputFileName)
     {
         // By some reason unknown to me the file the string contains a leading whitespace.  Hence the Trim.
@@ -625,7 +595,11 @@
 				tableElement.Attributes[ "Schema" ].Value + "." :
 				"", 
             tableName, 
-            "\"select * from " + tableName + "\""
+            "\"select * from " + 
+			( UseSchemaForNamespace ?
+				tableElement.Attributes[ "Schema" ].Value + "." :
+				"" ) + 
+			tableName + "\""
         );
         Out( "" );
 
@@ -713,7 +687,12 @@
 					schemaName + "." :
 					"", 
 				tableName, 
-				"\"select * from " + tableName + " where " + CreateQuerySelectEqualParameterListString( columnsUsedInIxFk ) + "\"", 
+				"\"select * from " + 
+					( UseSchemaForNamespace ?
+						schemaName + "." :
+						"" ) + 
+					tableName + 
+					" where " + CreateQuerySelectEqualParameterListString( columnsUsedInIxFk ) + "\"", 
                 "new { " + CreateObjectAssignmentParameterListString( columnsUsedInIxFk ) + " }"
 			);
     }
@@ -725,6 +704,7 @@
     {
 		Out_SurfaceInsertMethod(
 			tableName, 
+			tableElement.Attributes["Schema"].Value, 
 			tableElement, 
 			columnList.Where( c => bool.Parse( c.Attributes["IsPrimaryKey"].Value ) == false )
 		);
@@ -732,12 +712,11 @@
 	
     private void Out_SurfaceInsertMethod( 
         string tableName, 
+		string schemaName, 
         XmlElement tableElement, 
         IEnumerable<XmlElement> columnList )
     {
 		// TODO: Move method signature creator to a method of its own.
-        // TODO: Set schema by parameter, not hard coded as right now.  Schema=
-        // TODO: Set namespace by setting, not hard coded DTO as now.
         Out_Comment(
             "This method inserts every field in the " + tableName + " table" +
             " exclusive the primary key(s).", 
@@ -762,7 +741,12 @@
 				return (int)res.Single();
 			}}"
 		, 
-			"\"insert into " + tableName +
+			"\"insert into " + 
+				( UseSchemaForNamespace ?
+					schemaName + "." :
+					""
+				) + 
+				tableName +
 				" ( " + CreateQueryInsertParameterListString( columnList ) + " )" +
 				" values( " + CreateQueryInsertParameterListStringWithAtSign( columnList ) + " )\"",
 			"new { " + CreateObjectAssignmentParameterListString( columnList ) + "}", 
@@ -790,7 +774,6 @@
         bool includePrimaryKey )
     {
         // TODO: Move method signature creator to a method of its own.
-        // TODO: Set schema by parameter, not hard coded as right now.  Schema=
 		// TODO: Make it possible to set setting for reading the record after writing it. Issue #4.
         Out_Comment(
             "This method updates every field in the " + tableName + " table" +
@@ -809,8 +792,11 @@
 					{1}, 
 					ctx.Trans);", 
                 string.Format( 
-                    "\"update {1} set {2}\"", 
+                    "\"update {1}{2} set {3}\"", 
                     Environment.NewLine, 
+					UseSchemaForNamespace ?
+						tableElement.Attributes[ "Schema" ].Value + "." :
+						"", 
                     tableName, 
                     CreateQuerySelectEqualParameterListString( columnList )
                     ), 
@@ -848,7 +834,12 @@
                     conn.Execute( {0} );
                 }}
             }}", 
-            "\"delete from " + tableName + "\""  );
+            "\"delete from " + 
+			( UseSchemaForNamespace ?
+				tableElement.Attributes[ "Schema" ].Value + "." :
+				"" ) + 
+			tableName + 
+			"\""  );
         Out( "" );
             
         //  Find all the indexes for the table.
@@ -911,10 +902,46 @@
                     usedColumns.Select( c => c.Attributes["Name"].Value ), 
                     ""
                 );
-                Out_SurfaceDeleteMethod( tableName, usedColumns );
+                Out_SurfaceDeleteMethod( 
+					tableName, 
+					tableElement.Attributes[ "Schema" ].Value, 
+					usedColumns );
                 Out( "" );
             }
         }
+    }
+	
+	private void Out_SurfaceDeleteMethod( string tableName, string schemaName, IEnumerable<XmlNode> columnsUsedInIxFk )
+    {
+		var formattedTableName = 
+			UseSchemaForNamespace ?
+				schemaName + "." + tableName :
+				tableName;
+		
+        // TODO: Move method signature creator to a method of its own.
+        Out( "public void DeleteBy{0}( {1} )", 
+            string.Join( "And", columnsUsedInIxFk.Select( c => c.Attributes["Name"].Value ) ), 
+            CreateMethodParameterListString( columnsUsedInIxFk )
+            );
+		Out("{");
+        PushIndent("\t");
+            Out_Text( @"
+                var ctx = MakeConnectionAndTransaction();
+                ctx.Conn.Open();
+                ctx.Conn.Execute( 
+                    {0}, 
+                    {1} );", 
+                string.Format( 
+                    "\"delete from {0} where {1}\"", 
+                    formattedTableName, 
+                    CreateQuerySelectEqualParameterListString( columnsUsedInIxFk )
+                ), 
+                string.Format( 
+                    "new {{ {0} }}", 
+                    CreateObjectAssignmentParameterListString( columnsUsedInIxFk ) )
+            );
+        PopIndent();
+		Out("}");
     }
 
     private void Out_Comment( string summaryText, IEnumerable<string> parameterList = null, string returnText = null )
