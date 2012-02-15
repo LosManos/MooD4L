@@ -11,9 +11,12 @@
 
     // CONFIGURE YOUR DATABASE SETTINGS HERE
 
-    string nameSpaceName                = @"";
-    string serverName                   = @".\sqlexpress";
-    string databaseName                 = @"";
+    const string DTONameSpaceName = @"DataLayer.DTO";
+    const string ServerName                   = @".\sqlexpress";
+    const string DatabaseName                 = @"";
+
+	//	Sets the namespace for the surface classes.
+    const string SurfaceNameSpaceName = @"DataLayer.Surface";
 
     // If you want to use sql authentication fill out these two variables...
     string SqlAuth_Username             = @"";
@@ -25,8 +28,8 @@
     // CONFIGURE CODE GENERATION HERE
 
     // Regex filter for the tables that are excluded from code generation.
-    // E.g.: "Applications|aspnet_.*" excludes the tables one gets with aspnet authentication.
-    const string ExcludeTablesRegex = "";
+    // E.g.: "Applications|aspnet_" excludes the tables one gets with aspnet authentication.
+    const string ExcludeTablesRegex = "Applications|aspnet_";
 
     /// <summary>Path for where the DTO classes are written.  The path is relative to the
     /// MooD4L.tt file.
@@ -34,7 +37,7 @@
     /// "" creates al DTO classes in the same folder as the MooD4L.tt file.
     /// </summary>
     const string 	DTOOutputPath = "DTO";
-
+	
     //	Set to true for making partial class.
     const bool UsePartialClass = true;
 
@@ -53,6 +56,16 @@
     // E.g.: ClassInheritFrom = "MyBaseClass, IMyInterface".
     const string ClassInheritFrom = "";
 
+    // The format for the DTO file name.
+    // Leave blank if the file name should be the same as the table's.  But don't
+	// since we want a trailing .cs for the compiler to work.
+    // Use {0} for inserting the table's name; string.Format is used by MooDAL.
+    // E.g. for a table called Customer:
+    // ".cs" => "Customer.cs"
+    // "Record.cs" => "CustomerRecord.cs"
+    // "The{0}Class.MooD4L.cs" => "TheCustomerClass.MooD4Lcs"
+    const string DTOFileNameFormat = "{0}.MooD4L.cs";
+
     // The format for the surface class name.
     // Leave blank if the class name should be the same as the table's.
     // Use {0} for inserting the table's name; string.Format is used by MooD4L.
@@ -61,16 +74,6 @@
     // "Surf" => "CustomerSurf"
     // "The{0}Class" => "TheCustomerClass"
     const string SurfaceClassNameFormat = "";
-
-    // The format for the surface file name.
-    // Leave blank if the file name should be the same as the table's.  But don't
-	// since we want a trailing .cs for the compiler to work.
-    // Use {0} for inserting the table's name; string.Format is used by MooDAL.
-    // E.g. for a table called Customer:
-    // ".cs" => "Customer.cs"
-    // "Surf.cs" => "CustomerSurf.cs"
-    // "The{0}Class.cs" => "TheCustomerClass.cs"
-    const string SurfaceFileNameFormat = "{0}Surface.MooD4L.cs";
 
     // The format for the surface file name.
     // Leave blank if the file name should be the same as the table's.  But don't
@@ -104,16 +107,16 @@
 
     bool ConfigIsValid()
     {
-        return !string.IsNullOrWhiteSpace(nameSpaceName)
-                    && !string.IsNullOrWhiteSpace(serverName)
-                    && !string.IsNullOrWhiteSpace(databaseName);
+        return !string.IsNullOrWhiteSpace( DTONameSpaceName )
+                    && !string.IsNullOrWhiteSpace( ServerName )
+                    && !string.IsNullOrWhiteSpace( DatabaseName );
     }
 
     string GetConnectionString()
     {
-      string conn = String.Format(TrustedConnectionString, serverName, databaseName);
-        if( !String.IsNullOrWhiteSpace(SqlAuth_Username) )
-            conn = String.Format(SqlAuthConnectionString, serverName, databaseName, SqlAuth_Username, SqlAuth_Password);
+      string conn = String.Format( TrustedConnectionString, ServerName, DatabaseName );
+        if( false == String.IsNullOrWhiteSpace( SqlAuth_Username ) )
+            conn = String.Format( SqlAuthConnectionString, ServerName, DatabaseName, SqlAuth_Username, SqlAuth_Password );
         else if (!String.IsNullOrWhiteSpace(Config_ConnectionName))
         {
             var configFile = new ExeConfigurationFileMap { ExeConfigFilename = GetRootProjectDirectory() };

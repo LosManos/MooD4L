@@ -27,9 +27,9 @@
         using(SqlConnection conn = new SqlConnection(connectionString))
         {
             var serverConnection = new ServerConnection(conn);
-            var tables = new Server(serverConnection).Databases[databaseName].Tables;
+            var tables = new Server(serverConnection).Databases[DatabaseName].Tables;
 
-            OutputXml( new Server(serverConnection).Databases[databaseName] );
+            OutputXml( new Server(serverConnection).Databases[DatabaseName] );
             var xmlPath = SaveOutput( "MooD4L.xml" );
             AddFileToProject( xmlPath );
 
@@ -37,20 +37,19 @@
             var xmldoc = new XmlDocument();
             xmldoc.Load( textReader );
             textReader.Close();
-            // TODO: Change namespace parameter to constant.
-            OutputSurface( "DataLayer.Surface", xmldoc );
+            OutputSurface( SurfaceNameSpaceName, xmldoc );
       
 			//	Create DTO class output directory if needed.
 			var dtoClassOutputDirectory = Path.Combine( Path.GetDirectoryName(Host.TemplateFile), DTOOutputPath );
 			if( false == Directory.Exists( dtoClassOutputDirectory ) ){
 				Directory.CreateDirectory( dtoClassOutputDirectory );
 			}
-						
+
             foreach (Table table in tables)
             {
                 if ( IsClassOkToGenerate( table ) )
                 {
-                    OutputClass(nameSpaceName, table);
+                    OutputClass(DTONameSpaceName, table);
                     var path = SaveOutput( Path.Combine( DTOOutputPath, string.Format( DTOFileNameFormat, table.Name ) ) );
                     // total hack but it adds the newly written file into the current visual studio instance
                     var project = GetCurrentProject();
@@ -625,7 +624,7 @@
                     return res.ToList();
                 }}
             }}", 
-            nameSpaceName, 
+            DTONameSpaceName, 
             tableName, 
             "\"select * from " + tableName + "\""
         );
