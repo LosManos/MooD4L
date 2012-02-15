@@ -105,9 +105,9 @@
             ret += " partial";
         }
         ret += " class " + table.Name;
-        if( false == string.IsNullOrWhiteSpace( ClassInheritFrom ) )
+        if( false == string.IsNullOrWhiteSpace( DTOClassInheritFrom ) )
         {
-            ret += " : " + ClassInheritFrom;
+            ret += " : " + DTOClassInheritFrom;
         }
         return ret;
    }
@@ -119,7 +119,7 @@
         // more generic CreateClassSignature method?
         var ret = string.Format( 
             "public {0} class {1}{2}", 
-            UsePartialClass ? " partial" : "", 
+            DTOUsePartialClass ? " partial" : "", 
             string.Format( 
                 SurfaceClassNameFormat.IndexOf( "{0}" ) == -1 ? 
                     "{0}" + SurfaceClassNameFormat : 
@@ -491,7 +491,7 @@
 			Out("using System;");
 			Out("using System.ComponentModel.DataAnnotations;");
 			Out( "" );
-			Out( CreateClassSignature( table, UsePartialClass ) );
+			Out( CreateClassSignature( table, DTOUsePartialClass ) );
 			Out("{");
 			PushIndent("\t");
 				//	Properties.
@@ -499,13 +499,13 @@
 				Out(String.Join(System.Environment.NewLine, properties));
 		
 				//	Static constructors.
-				if( false == string.IsNullOrWhiteSpace( NameOfStaticConstructor ) )
+				if( false == string.IsNullOrWhiteSpace( DTONameOfStaticConstructor ) )
 				{
 					Out("");
 			        Out( "/// <summary> This static constructor takes all fields but the primary key." );
 			        Out( "/// </summary>");
 			        Out( "/// <returns></returns>");
-					Out( CreateMethodSignature( "public", true, table.Name, NameOfStaticConstructor, table.Columns, includePrimaryKey : false ) );
+					Out( CreateMethodSignature( "public", true, table.Name, DTONameOfStaticConstructor, table.Columns, includePrimaryKey : false ) );
 					Out("{");
 					PushIndent("\t");
 						Out( "return new " + table.Name + "()" );
@@ -520,7 +520,7 @@
 			        Out( "/// <summary> This static constructor takes all fields including the primary key." );
 			        Out( "/// </summary>");
 			        Out( "/// <returns></returns>");
-					Out( CreateMethodSignature( "public", true, table.Name, NameOfStaticConstructor, table.Columns ) );
+					Out( CreateMethodSignature( "public", true, table.Name, DTONameOfStaticConstructor, table.Columns ) );
 					Out("{");
 					PushIndent("\t");
 						Out( "return new " + table.Name + "()" );

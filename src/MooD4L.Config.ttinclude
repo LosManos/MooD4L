@@ -47,17 +47,17 @@
     /// </summary>
     const string 	DTOOutputPath = "DTO";
 	
-    //	Set to true for making partial class.
-    const bool UsePartialClass = true;
+    //	Set to true for making the DTOs partial classes.
+    const bool DTOUsePartialClass = true;
 
-    // Static constructor name.
+    // Static constructor name for the DTOs.
     // Leave blank if no static constructor should be created.
-    const string NameOfStaticConstructor = "Create";
+    const string DTONameOfStaticConstructor = "Create";
 
     // Set whether the class should inherit or implement an interface or two.
     // Leave blank no inheritance or interface implementing is to be created.
     // E.g.: ClassInheritFrom = "MyBaseClass, IMyInterface".
-    const string ClassInheritFrom = "";
+    const string DTOClassInheritFrom = "";
 
     // The format for the DTO file name.
     // Leave blank if the file name should be the same as the table's.  But don't
