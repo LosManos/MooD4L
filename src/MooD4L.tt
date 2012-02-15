@@ -637,16 +637,19 @@
             {
                 methodSigList.Add( paramString );    // Add the new unique string of method parameters.
 
-                // TODO: Comment that this is the method to search via the PK, if it is the pk.
                 // TODO: The method should return a single value if the index, like pk, is unique.
+				XmlAttribute indexTypeAttribute = indexElement.Attributes["IndexType"];
                 Out_Comment( 
-                    string.Format( @"This method uses the {1} index{0}for searching of field(s) {2}.", 
+                    string.Format( @"This method uses the {1} index{0}for searching of field(s) {2}.{3}", 
                         Environment.NewLine, 
                         indexElement.Attributes["Name"].Value, 
-                        string.Join( " and ", usedColumns.Select( n=>n.Attributes["Name"].Value ) )
+                        string.Join( " and ", usedColumns.Select( n=>n.Attributes["Name"].Value ) ), 
+						( null != indexTypeAttribute && "PrimaryKey" == indexTypeAttribute.Value ?
+							Environment.NewLine + "The index is the primary key." :
+							"" )
                     ), 
                     usedColumns.Select( c => c.Attributes["Name"].Value ), 
-                    ""
+					""
                 );
                 Out_SurfaceFindMethod( 
 					tableName, 
@@ -662,8 +665,6 @@
     private void Out_SurfaceFindMethod( string tableName, string schemaName, IEnumerable<XmlNode> columnsUsedInIxFk )
     {
         // TODO: Move method signature creator to a method of its own.
-        // TODO: Set schema by parameter, not hard coded as right now.  Schema=
-        // TODO: Write a comment to the method that selects the primary key that it does just that.  It should also return just 1 record.
         Out( "public List<{0}{1}{2}> FindBy{3}( {4} )", 
 			DTONameSpaceName + ".", 
 			UseSchemaForNamespace ?
