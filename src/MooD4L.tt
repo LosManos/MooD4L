@@ -167,30 +167,11 @@
 		return ret;
 	}
 
-	
-    /// <summary> This method creates a parameter for a method from a column.
-    /// E.g.: "int CustomerID" or "string Name".
-    /// </summary>
-    /// <param name="column"></param>
-    /// <returns></returns>
-	private static string CreateMethodParameter( Column column )
-	{
-        var isNullable       = column.Nullable;
-        var type             = TypeMappings.ContainsKey(column.DataType.Name) ? TypeMappings[column.DataType.Name] : "string";
-        var typeFormat       = type != "string" && isNullable ? "Nullable<{0}>" : "{0}";
-
-        return String.Format("{0} {1}", String.Format(typeFormat,type), column.Name);
-	}
-
-    private static string CreateMethodParameter( XmlNode node )
+    private static string CreateMethodParameterListString( 
+        IEnumerable<XmlNode> nodeList, 
+        bool includePrimaryKey = true )
     {
-        var isNullable = bool.Parse( node.Attributes["IsNullable"].Value );
-        var parameterName = node.Attributes["Name"].Value;
-		var parameterType = node.Attributes["DotnetType"].Value;
-        var type = TypeMappings.ContainsKey( parameterType ) ? 
-			TypeMappings[parameterType] : "string";
-        var typeFormat       = type != "string" && isNullable ? "Nullable<{0}>" : "{0}";
-        return String.Format("{0} {1}", String.Format(typeFormat,type), parameterName);
+        return string.Join( ", ", CreateMethodParameterList( nodeList, includePrimaryKey ) );
     }
 
     private static IEnumerable<string> CreateMethodParameterList( 
@@ -209,43 +190,94 @@
         }
     }
 
-    private static string CreateMethodParameterListString( 
-        IEnumerable<XmlNode> nodeList, 
-        bool includePrimaryKey = true )
+    private static string CreateMethodParameter( XmlNode node )
     {
-        return string.Join( ", ", CreateMethodParameterList( nodeList, includePrimaryKey ) );
+        var isNullable = bool.Parse( node.Attributes["IsNullable"].Value );
+        var parameterName = node.Attributes["Name"].Value;
+		var parameterType = node.Attributes["DotnetType"].Value;
+        var type = TypeMappings.ContainsKey( parameterType ) ? 
+			TypeMappings[parameterType] : "string";
+        var typeFormat       = type != "string" && isNullable ? "Nullable<{0}>" : "{0}";
+        return String.Format("{0} {1}", String.Format(typeFormat,type), parameterName);
     }
+
+    /// <summary> This method creates a parameter for a method from a column.
+    /// E.g.: "int CustomerID" or "string Name".
+    /// </summary>
+    /// <param name="column"></param>
+    /// <returns></returns>
+	private static string CreateMethodParameter( Column column )
+	{
+        var isNullable       = column.Nullable;
+        var type             = TypeMappings.ContainsKey(column.DataType.Name) ? TypeMappings[column.DataType.Name] : "string";
+        var typeFormat       = type != "string" && isNullable ? "Nullable<{0}>" : "{0}";
+
+        return String.Format("{0} {1}", String.Format(typeFormat,type), column.Name);
+	}
 
     private static string CreateQuerySelectEqualParameter( XmlNode node )
     {
-        return string.Format( "{0} = @{1}", 
+	/// <summary>This method returns e.g. "CustomerID = @CustomerID" for a column.
+	/// </summary>
+	/// <param name="node"></param>
+	/// <returns></returns>
+
+		return string.Format( "{0} = @{1}", 
             node.Attributes["Name"].Value, 
             node.Attributes["Name"].Value
         );
     }
-	
+
 	private static string CreateQueryInsertParameterListString( IEnumerable<XmlElement> columnList )
 	{
+	/// <summary>This method returns e.g. "CustomerID, Name" for a list of columns.
+	/// </summary>
+	/// <param name="columnList"></param>
+	/// <returns></returns>
 		return string.Join( ", ", columnList.Select( c => c.Attributes["Name"].Value ) );
 	}
 
 	private static string CreateQueryInsertParameterListStringWithAtSign( IEnumerable<XmlElement> columnList )
 	{
+	/// <summary>This method returns e.g. "@CustomerID, @Name" for a list of columns.
+	/// </summary>
+	/// <param name="columnList"></param>
+	/// <returns></returns>
 		return string.Join( ", ", columnList.Select( c => "@" + c.Attributes["Name"].Value ) );
 	}
 
-    private static IEnumerable<string> CreateQuerySelectEqualParameterList( IEnumerable<XmlNode> nodeList )
-    {
-        return nodeList.Select( c => CreateQuerySelectEqualParameter( c ) );
-    }
-
     private static string CreateQuerySelectEqualParameterListString( IEnumerable<XmlNode> nodeList )
     {
+	/// <summary>This method returns e.g.
+	/// "CustomerID = @CustomerID and Name = @Name" for a list of columns.
+	/// </summary>
+	/// <param name="nodeList"></param>
+	/// <returns></returns>
         return string.Join( " and ", CreateQuerySelectEqualParameterList( nodeList ) );
     }
 
+    private static IEnumerable<string> CreateQuerySelectEqualParameterList( IEnumerable<XmlNode> nodeList )
+    {
+	/// <summary>This method returns e.g.
+	/// [ "CustomerID = @CustomerID", "Name = @Name" ] for a list of columns.
+	/// </summary>
+	/// <param name="nodeList"></param>
+	/// <returns></returns>
+        return nodeList.Select( c => CreateQuerySelectEqualParameter( c ) );
+    }
+	
+	private static string CreateQueryUpdateAssignment( IEnumerable<XmlNode> nodeList )
+	{
+		return string.Join( ", ", 
+			nodeList.Select( c => CreateQuerySelectEqualParameter( c ) ) );
+	}
+
     private static string CreateObjectAssignmentParameter( XmlNode node )
     {
+	/// <summary>This method returns e.g. "CustomerID = CustomerID" for a column.
+	/// </summary>
+	/// <param name="node"></param>
+	/// <returns></returns>
         return string.Format( "{0} = {1}", 
             node.Attributes["Name"].Value, 
             node.Attributes["Name"].Value
@@ -787,10 +819,10 @@
         XmlElement tableElement, 
         IEnumerable<XmlElement> columnList )
     {
-        Out_SurfaceUpdateMethod( tableName, tableElement, 
-            columnList.Where( c => bool.Parse( c.Attributes["IsPrimaryKey"].Value ) == false ), 
-            false
-        );
+        // Out_SurfaceUpdateMethod( tableName, tableElement, 
+        //    columnList.Where( c => bool.Parse( c.Attributes["IsPrimaryKey"].Value ) == false ), 
+        //    false
+        //);
         Out_SurfaceUpdateMethod( tableName, tableElement, columnList, true );
     }
 
@@ -803,8 +835,8 @@
 		// TODO: Make it possible to set setting for reading the record after writing it. Issue #4.
         
 		Out_Comment(
-            "This method updates every field in the " + tableName + " table" +
-            ( includePrimaryKey ? "." : " exclusive the primary key(s)." ), 
+            "This method updates every field in the " + tableName + " table.", 
+            // ( includePrimaryKey ? "." : " exclusive the primary key(s)." ), 
             columnList.Select( c => c.Attributes["Name"].Value )
         );
 
@@ -821,13 +853,16 @@
 					{1}, 
 					ctx.Trans);", 
                 string.Format( 
-                    "\"update {1}{2} set {3}\"", 
+                    "\"update {1}{2} set {3} where {4}\"", 
                     Environment.NewLine, 
 					UseSchemaForNamespace ?
 						tableElement.Attributes[ "Schema" ].Value + "." :
 						"", 
                     tableName, 
-                    CreateQuerySelectEqualParameterListString( columnList )
+                    CreateQueryUpdateAssignment( 
+						columnList.Where( c => false  == bool.Parse( c.Attributes["IsPrimaryKey"].Value ) ) ), 
+					CreateQuerySelectEqualParameterListString( 
+						columnList.Where( c => true  == bool.Parse( c.Attributes["IsPrimaryKey"].Value ) ) )
                     ), 
                 string.Format( 
                     "new {{ {0} }}", 
