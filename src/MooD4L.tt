@@ -548,9 +548,9 @@
             //  Find all colums for the Table.
             var columnList = ToList( tableElement.SelectNodes( "Columns/Column" ) ).Cast<XmlElement>();
 
-            Out_SurfaceInsertMethods( tableName, tableElement, columnList );
+            Out_SurfaceCreateMethods( tableName, tableElement, columnList );
 
-            Out_SurfaceFindMethods( tableName, tableElement, columnList );
+            Out_SurfaceRetrieveMethods( tableName, tableElement, columnList );
         
             Out_SurfaceUpdateMethods( tableName, tableElement, columnList );
 
@@ -563,7 +563,7 @@
         return string.Format( SurfaceFileNameFormat, tableName );
     }
     
-    private void Out_SurfaceFindMethods( 
+    private void Out_SurfaceRetrieveMethods( 
         string tableName, 
         XmlElement tableElement, 
         IEnumerable<XmlElement> columnList )
@@ -605,14 +605,14 @@
 
         //  Find all the indexes for the table.
         var ixNodeList = ToList( tableElement.SelectNodes( "Indexes/Index" ) ).Cast<XmlElement>();
-        Out_SurfaceFindMethods( tableName, tableElement, columnList, ixNodeList, methodSigList );
+        Out_SurfaceRetrieveMethods( tableName, tableElement, columnList, ixNodeList, methodSigList );
 
         // Find every FK for the Table.  We want 1 method per FK since every FK can be searched on.
         var fkNodeList = ToList( tableElement.SelectNodes( "ForeignKeys/ForeignKey" ) ).Cast<XmlElement>();
-        Out_SurfaceFindMethods( tableName, tableElement, columnList, fkNodeList, methodSigList );
+        Out_SurfaceRetrieveMethods( tableName, tableElement, columnList, fkNodeList, methodSigList );
     }
 
-    private void Out_SurfaceFindMethods( 
+    private void Out_SurfaceRetrieveMethods( 
         string tableName, 
         XmlElement tableElement, 
         IEnumerable<XmlElement> columnList, 
@@ -639,10 +639,10 @@
 
 				XmlAttribute indexTypeAttribute = indexElement.Attributes["IndexType"];
 				bool isPrimaryKey = 
-					null != indexTypeAttribute && "PrimaryKey" == indexTypeAttribute.Value;
+					usedColumns.All( c => bool.Parse( c.Attributes["IsPrimaryKey"].Value ) );
                 string indexName = indexElement.Attributes["Name"].Value;
 
-				Out_SurfaceFindMethod( 
+				Out_SurfaceRetrieveMethod( 
 					tableName, 
 					UseSchemaForNamespace ?
 						tableElement.Attributes[ "Schema" ].Value :
@@ -655,7 +655,7 @@
         }
     }
 
-    private void Out_SurfaceFindMethod( 
+    private void Out_SurfaceRetrieveMethod( 
 		string tableName, 
 		string schemaName, 
 		string indexName, 
@@ -687,9 +687,13 @@
 		if( false == isPrimaryKey ){
 			s += ">";
 		}
-		s += " FindBy" +
-            string.Join( "And", columnsUsedInIxFk.Select( c => c.Attributes["Name"].Value ) ) +
-			"( " +
+		s += " Retrieve";
+		s += ( isPrimaryKey ?
+			"" :
+			"By" +
+            string.Join( "And", columnsUsedInIxFk.Select( c => c.Attributes["Name"].Value ) )
+		);
+		s += "( " +
 		    CreateMethodParameterListString( columnsUsedInIxFk ) +
 			" )";
 		
@@ -719,12 +723,12 @@
 			);
     }
 
-    private void Out_SurfaceInsertMethods( 
+    private void Out_SurfaceCreateMethods( 
         string tableName, 
         XmlElement tableElement, 
         IEnumerable<XmlElement> columnList )
     {
-		Out_SurfaceInsertMethod(
+		Out_SurfaceCreateMethod(
 			tableName, 
 			tableElement.Attributes["Schema"].Value, 
 			tableElement, 
@@ -732,7 +736,7 @@
 		);
     }
 	
-    private void Out_SurfaceInsertMethod( 
+    private void Out_SurfaceCreateMethod( 
         string tableName, 
 		string schemaName, 
         XmlElement tableElement, 
@@ -954,7 +958,7 @@
 					""
             ), 
             columnsUsedInIxFk.Select( c => c.Attributes["Name"].Value ), 
-            ""
+            null
         );
 
         // TODO: Move method signature creator to a method of its own.
