@@ -918,10 +918,14 @@
             {
                 methodSigList.Add( paramString );    // Add the new unique string of method parameters.
 
-                Out_SurfaceDeleteMethod( 
+				var isPrimaryKey = usedColumns.
+					All( c => bool.Parse( c.Attributes["IsPrimaryKey"].Value ) );
+             
+				Out_SurfaceDeleteMethod( 
 					tableName, 
 					tableElement.Attributes[ "Schema" ].Value, 
 					indexElement.Attributes["Name"].Value, 
+					isPrimaryKey, 
 					usedColumns );
                 Out( "" );
             }
@@ -932,6 +936,7 @@
 		string tableName, 
 		string schemaName, 
 		string ixfkName, 
+		bool isPrimaryKey, 
 		IEnumerable<XmlNode> columnsUsedInIxFk )
     {
 		var formattedTableName = 
@@ -940,18 +945,23 @@
 				tableName;
 
         Out_Comment( 
-            string.Format( @"This method uses the {1} index/fk{0}for deleting a record.  Filtering is dune by field(s) {2}.", 
+            string.Format( @"This method uses the {1} index/fk{0}for deleting a record.  Filtering is dune by field(s) {2}.{3}", 
                 Environment.NewLine, 
                 ixfkName, 
-                string.Join( " and ", columnsUsedInIxFk.Select( n=>n.Attributes["Name"].Value ) )
+                string.Join( " and ", columnsUsedInIxFk.Select( n=>n.Attributes["Name"].Value ) ), 
+				isPrimaryKey ?
+					Environment.NewLine + "The parameter(s) is the primary key." :
+					""
             ), 
             columnsUsedInIxFk.Select( c => c.Attributes["Name"].Value ), 
             ""
         );
 
         // TODO: Move method signature creator to a method of its own.
-        Out( "public void DeleteBy{0}( {1} )", 
-            string.Join( "And", columnsUsedInIxFk.Select( c => c.Attributes["Name"].Value ) ), 
+        Out( "public void Delete{0}( {1} )", 
+			isPrimaryKey ?
+				"" :
+             	"By" + string.Join( "And", columnsUsedInIxFk.Select( c => c.Attributes["Name"].Value ) ), 
             CreateMethodParameterListString( columnsUsedInIxFk )
             );
 		Out("{");
