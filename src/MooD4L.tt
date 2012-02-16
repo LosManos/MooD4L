@@ -637,27 +637,17 @@
             {
                 methodSigList.Add( paramString );    // Add the new unique string of method parameters.
 
-                // TODO: The method should return a single value if the index, like pk, is unique.
 				XmlAttribute indexTypeAttribute = indexElement.Attributes["IndexType"];
 				bool isPrimaryKey = 
 					null != indexTypeAttribute && "PrimaryKey" == indexTypeAttribute.Value;
-                Out_Comment( 
-                    string.Format( @"This method uses the {1} index{0}for searching of field(s) {2}.{3}", 
-                        Environment.NewLine, 
-                        indexElement.Attributes["Name"].Value, 
-                        string.Join( " and ", usedColumns.Select( n=>n.Attributes["Name"].Value ) ), 
-						isPrimaryKey ?
-							Environment.NewLine + "The index is the primary key." :
-							"" 
-                    ), 
-                    usedColumns.Select( c => c.Attributes["Name"].Value ), 
-					""
-                );
-                Out_SurfaceFindMethod( 
+                string indexName = indexElement.Attributes["Name"].Value;
+
+				Out_SurfaceFindMethod( 
 					tableName, 
 					UseSchemaForNamespace ?
 						tableElement.Attributes[ "Schema" ].Value :
 						null, 
+					indexName, 
 					usedColumns, 
 					isPrimaryKey );
                 Out( "" );
@@ -668,11 +658,24 @@
     private void Out_SurfaceFindMethod( 
 		string tableName, 
 		string schemaName, 
+		string indexName, 
 		IEnumerable<XmlNode> columnsUsedInIxFk, 
 		bool isPrimaryKey )
     {
-        // TODO: Move method signature creator to a method of its own.
-		
+        Out_Comment( 
+            string.Format( @"This method uses the {1} index{0}for searching of field(s) {2}.{3}", 
+                Environment.NewLine, 
+				indexName, 
+                string.Join( " and ", columnsUsedInIxFk.Select( n=>n.Attributes["Name"].Value ) ), 
+				isPrimaryKey ?
+					Environment.NewLine + "The index is the primary key." :
+					"" 
+            ), 
+            columnsUsedInIxFk.Select( c => c.Attributes["Name"].Value ), 
+			""
+        );
+
+        // TODO: Move method signature creator to a method of its own.		
 		var s = "public ";
 		if( false == isPrimaryKey ){
 			s += "IEnumerable<";
@@ -735,13 +738,14 @@
         XmlElement tableElement, 
         IEnumerable<XmlElement> columnList )
     {
-		// TODO: Move method signature creator to a method of its own.
         Out_Comment(
             "This method inserts every field in the " + tableName + " table" +
             " exclusive the primary key(s).", 
             columnList.Select( c => c.Attributes["Name"].Value )
         );
-        Out_Text( "public int Insert( {0} )", 
+
+		// TODO: Move method signature creator to a method of its own.
+		Out_Text( "public int Insert( {0} )", 
         	CreateMethodParameterListString( columnList )
         );
 		
@@ -792,14 +796,16 @@
         IEnumerable<XmlElement> columnList, 
         bool includePrimaryKey )
     {
-        // TODO: Move method signature creator to a method of its own.
 		// TODO: Make it possible to set setting for reading the record after writing it. Issue #4.
-        Out_Comment(
+        
+		Out_Comment(
             "This method updates every field in the " + tableName + " table" +
             ( includePrimaryKey ? "." : " exclusive the primary key(s)." ), 
             columnList.Select( c => c.Attributes["Name"].Value )
         );
-        Out( "public void Update( {0} )", 
+
+        // TODO: Move method signature creator to a method of its own.
+		Out( "public void Update( {0} )", 
             CreateMethodParameterListString( columnList )
         );
         Out( "{" );
@@ -912,31 +918,37 @@
             {
                 methodSigList.Add( paramString );    // Add the new unique string of method parameters.
 
-                Out_Comment( 
-                    string.Format( @"This method uses the {1} index/fk{0}for deleting a record.  Filtering is dune by field(s) {2}.", 
-                        Environment.NewLine, 
-                        indexElement.Attributes["Name"].Value, 
-                        string.Join( " and ", usedColumns.Select( n=>n.Attributes["Name"].Value ) )
-                    ), 
-                    usedColumns.Select( c => c.Attributes["Name"].Value ), 
-                    ""
-                );
                 Out_SurfaceDeleteMethod( 
 					tableName, 
 					tableElement.Attributes[ "Schema" ].Value, 
+					indexElement.Attributes["Name"].Value, 
 					usedColumns );
                 Out( "" );
             }
         }
     }
 	
-	private void Out_SurfaceDeleteMethod( string tableName, string schemaName, IEnumerable<XmlNode> columnsUsedInIxFk )
+	private void Out_SurfaceDeleteMethod( 
+		string tableName, 
+		string schemaName, 
+		string ixfkName, 
+		IEnumerable<XmlNode> columnsUsedInIxFk )
     {
 		var formattedTableName = 
 			UseSchemaForNamespace ?
 				schemaName + "." + tableName :
 				tableName;
-		
+
+        Out_Comment( 
+            string.Format( @"This method uses the {1} index/fk{0}for deleting a record.  Filtering is dune by field(s) {2}.", 
+                Environment.NewLine, 
+                ixfkName, 
+                string.Join( " and ", columnsUsedInIxFk.Select( n=>n.Attributes["Name"].Value ) )
+            ), 
+            columnsUsedInIxFk.Select( c => c.Attributes["Name"].Value ), 
+            ""
+        );
+
         // TODO: Move method signature creator to a method of its own.
         Out( "public void DeleteBy{0}( {1} )", 
             string.Join( "And", columnsUsedInIxFk.Select( c => c.Attributes["Name"].Value ) ), 
