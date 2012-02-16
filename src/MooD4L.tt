@@ -639,14 +639,16 @@
 
                 // TODO: The method should return a single value if the index, like pk, is unique.
 				XmlAttribute indexTypeAttribute = indexElement.Attributes["IndexType"];
+				bool isPrimaryKey = 
+					null != indexTypeAttribute && "PrimaryKey" == indexTypeAttribute.Value;
                 Out_Comment( 
                     string.Format( @"This method uses the {1} index{0}for searching of field(s) {2}.{3}", 
                         Environment.NewLine, 
                         indexElement.Attributes["Name"].Value, 
                         string.Join( " and ", usedColumns.Select( n=>n.Attributes["Name"].Value ) ), 
-						( null != indexTypeAttribute && "PrimaryKey" == indexTypeAttribute.Value ?
+						isPrimaryKey ?
 							Environment.NewLine + "The index is the primary key." :
-							"" )
+							"" 
                     ), 
                     usedColumns.Select( c => c.Attributes["Name"].Value ), 
 					""
@@ -656,24 +658,39 @@
 					UseSchemaForNamespace ?
 						tableElement.Attributes[ "Schema" ].Value :
 						null, 
-					usedColumns );
+					usedColumns, 
+					isPrimaryKey );
                 Out( "" );
             }
         }
     }
 
-    private void Out_SurfaceFindMethod( string tableName, string schemaName, IEnumerable<XmlNode> columnsUsedInIxFk )
+    private void Out_SurfaceFindMethod( 
+		string tableName, 
+		string schemaName, 
+		IEnumerable<XmlNode> columnsUsedInIxFk, 
+		bool isPrimaryKey )
     {
         // TODO: Move method signature creator to a method of its own.
-        Out( "public List<{0}{1}{2}> FindBy{3}( {4} )", 
-			DTONameSpaceName + ".", 
-			UseSchemaForNamespace ?
-				schemaName + "." :
-				"", 
-            tableName, 
-            string.Join( "And", columnsUsedInIxFk.Select( c => c.Attributes["Name"].Value ) ), 
-            CreateMethodParameterListString( columnsUsedInIxFk )
-            );
+		
+		var s = "public ";
+		if( false == isPrimaryKey ){
+			s += "IEnumerable<";
+		}
+		s += 
+			DTONameSpaceName + "." + 
+			( UseSchemaForNamespace ? schemaName + "." : "" ) +
+			tableName;
+		if( false == isPrimaryKey ){
+			s += ">";
+		}
+		s += " FindBy" +
+            string.Join( "And", columnsUsedInIxFk.Select( c => c.Attributes["Name"].Value ) ) +
+			"( " +
+		    CreateMethodParameterListString( columnsUsedInIxFk ) +
+			" )";
+		
+		Out( s );
 		Out_Text( @"
 			{{
 				var ctx = MakeConnectionAndTransaction();
@@ -681,7 +698,7 @@
 					{3},
 					{4},
 					transaction: ctx.Trans );
-				return res.ToList();
+					return res{5};
 			}}", 
 				DTONameSpaceName, 
 				UseSchemaForNamespace ?
@@ -694,7 +711,8 @@
 						"" ) + 
 					tableName + 
 					" where " + CreateQuerySelectEqualParameterListString( columnsUsedInIxFk ) + "\"", 
-                "new { " + CreateObjectAssignmentParameterListString( columnsUsedInIxFk ) + " }"
+                "new { " + CreateObjectAssignmentParameterListString( columnsUsedInIxFk ) + " }", 
+				( isPrimaryKey ? ".Single()" : "" )
 			);
     }
 
