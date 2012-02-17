@@ -112,7 +112,30 @@ namespace DataLayer.Surface
         private void CreateOrUseConnection()
         {
             //_conn = _conn ?? new SqlConnection(Properties.Settings.Default.ConnString);
-            _conn = _conn ?? new SqlConnection( "MooD4L" );
+            //_conn = _conn ?? new SqlConnection( "MooD4L" );
+            if (null == _conn)
+            {
+                string connectionStringKey = System.Configuration.ConfigurationManager.AppSettings["MooD4L"];
+                if (null == connectionStringKey)
+                {
+                    throw new System.Configuration.ConfigurationErrorsException( "There is no appsetting called \"MooD4L\"" );
+                }
+                var setting = System.Configuration.ConfigurationManager.ConnectionStrings[connectionStringKey];
+                if (null == setting)
+                {
+                    throw new System.Configuration.ConfigurationErrorsException( 
+                        string.Format( "The appsetting \"{0}\" points to connection string \"{1}\" which does not exist.", 
+                            "MooD4L", 
+                            connectionStringKey )
+                    );
+                }
+                string connectionString = System.Configuration.ConfigurationManager.ConnectionStrings[connectionStringKey].ConnectionString;
+                if ( string.IsNullOrWhiteSpace( connectionString ) )
+                {
+                    throw new Exception("no connsettings");
+                }
+                _conn = new SqlConnection(connectionString);
+            }
         }
 
     }
