@@ -39,11 +39,11 @@
             textReader.Close();
             OutputSurface( SurfaceNameSpaceName, xmldoc );
       
-			//	Create DTO class output directory if needed.
-			var dtoClassOutputDirectory = Path.Combine( Path.GetDirectoryName(Host.TemplateFile), DTOOutputPath );
-			if( false == Directory.Exists( dtoClassOutputDirectory ) ){
-				Directory.CreateDirectory( dtoClassOutputDirectory );
-			}
+            //    Create DTO class output directory if needed.
+            var dtoClassOutputDirectory = Path.Combine( Path.GetDirectoryName(Host.TemplateFile), DTOOutputPath );
+            if( false == Directory.Exists( dtoClassOutputDirectory ) ){
+                Directory.CreateDirectory( dtoClassOutputDirectory );
+            }
 
             foreach (Table table in tables)
             {
@@ -62,8 +62,10 @@
     }
 #>
 <#+
-	
-    //  http://msdn.microsoft.com/en-us/library/bb386947.aspx
+    
+    /// <summary>This dictionary converts sql types to dotnet types.
+    /// http://msdn.microsoft.com/en-us/library/bb386947.aspx
+    /// </summary>
     private readonly static Dictionary<string, string> TypeMappings = new Dictionary<string, string> 
     {
         { "bit","bool" },           { "uniqueidentifier","Guid" },
@@ -74,7 +76,61 @@
         { "nvarchar","string" },    { "text","string" },
         { "ntext","string" }
     };
-	
+
+    /// <summary>This method appends an XML attribute to the element sent as parameter.
+    /// The attiribute's name and value are set.
+    /// </summary>
+    /// <param name="element"></param>
+    /// <param name="name"></param>
+    /// <param name="value"></param>
+    /// <returns></returns>
+    private XmlAttribute AppendAttribute( XmlElement element, string name, string value )
+    {
+        var newAttribute = element.OwnerDocument.CreateAttribute( name );
+        newAttribute.Value = value;
+        element.Attributes.Append( newAttribute );
+        return newAttribute;
+    }
+
+    /// <summary>This method appends an XML attribute to the element sent as parameter.
+    /// The attiribute's name and value are set.
+    /// </summary>
+    /// <param name="element"></param>
+    /// <param name="name"></param>
+    /// <param name="value"></param>
+    /// <returns></returns>
+    private XmlAttribute AppendAttribute( XmlElement element, string name, bool value )
+    {
+        return AppendAttribute( element, name, value.ToString() );
+    }
+
+    /// <summary>This method appends an XML attribute to the element sent as parameter.
+    /// The attiribute's name and value are set.
+    /// </summary>
+    /// <param name="element"></param>
+    /// <param name="name"></param>
+    /// <param name="value"></param>
+    /// <returns></returns>
+    private XmlAttribute AppendAttribute( XmlElement element, string name, int value )
+    {
+        return AppendAttribute( element, name, value.ToString() );
+    }
+
+    /// <summary>This method creates an XML element and appends it as a child to the parentElement.
+    /// </summary>
+    /// <param name="parentElement"></param>
+    /// <param name="elementName"></param>
+    /// <returns></returns>
+    private XmlElement AppendChildElement( XmlElement parentElement, string elementName )
+    {
+        var newElement = parentElement.OwnerDocument.CreateElement( elementName );
+        parentElement.AppendChild( newElement );
+        return newElement;
+    }
+    
+    /// <summary>This method adds the written file to the Visual studio project.
+    /// </summary>
+    /// <param name="xmlPathAndFile"></param>
     private void AddFileToProject( string xmlPathAndFile )
     {
         // total hack but it adds the newly written file into the current visual studio instance
@@ -82,16 +138,31 @@
         project.ProjectItems.AddFromFile( xmlPathAndFile );
     }
 
-    public EnvDTE.Project GetCurrentProject()
+    /// <summary>This method filters out the columns in the columnList from
+    /// what is used in the indexOrFkElement.  Think like this: send int all columns
+    /// for a table and an index for the same table.  Returned is then all columns
+    /// that are used in said index.  Replace index for foreign key at will.
+    /// </summary>
+    /// <param name="indexOrFkElement"></param>
+    /// <param name="columnList"></param>
+    /// <returns></returns>
+    private static IEnumerable<XmlElement> ColumnsFromIndexOrForeignKey(
+        XmlElement indexOrFkElement, 
+        IEnumerable<XmlElement> columnList )
     {
-        var serviceProvider             = (IServiceProvider)Host;
-        var dte                         = (EnvDTE.DTE)serviceProvider.GetService(typeof(EnvDTE.DTE));
-        var currentSlnProjects          = (Array)dte.ActiveSolutionProjects;
-
-        return (EnvDTE.Project)currentSlnProjects.GetValue(0);
+        //  Filter out the columns that are used for this index.
+        //  Note that the table's columns come from tableElement->Columns/Column
+        //  while the index's columns come from indexElement->Columns/Column.
+        var usedColumns = 
+            from c in columnList
+            where ToList( indexOrFkElement.SelectNodes( "Columns/Column" ) )
+                .Select( ic => ic.Attributes["Name"].Value ).ToList()
+                .Contains( c.Attributes["Name"].Value )
+            select c;
+        return usedColumns;
     }
-	
-	/// <summary> This method creates the signature for the class.
+
+    /// <summary> This method creates the signature for the class.
     /// E.g.: public partial class Customer()
     /// </summary>
     /// <param name="table"></param>
@@ -112,22 +183,11 @@
         return ret;
    }
 
-    private static string CreateSurfaceClassSignature( string tableName )
-    {
-        var ret = string.Format( 
-            "public {0} class {1}{2}", 
-            DTOUsePartialClass ? " partial" : "", 
-            string.Format( 
-                SurfaceClassNameFormat.IndexOf( "{0}" ) == -1 ? 
-                    "{0}" + SurfaceClassNameFormat : 
-                    SurfaceClassNameFormat, 
-                tableName 
-            ), 
-            string.IsNullOrWhiteSpace( SurfaceClassInheritFrom ) ? "" : " : " + SurfaceClassInheritFrom
-        );
-        return ret;
-   }
-
+    /// <summary>This method returns the text that should go into every file header.
+    /// </summary>
+    /// <param name="commentPrefix"></param>
+    /// <param name="null"></param>
+    /// <returns></returns>
     private static string CreateFileHeader( string commentPrefix, string commentSuffix = null )
     {
         return 
@@ -140,33 +200,28 @@
                 commentSuffix );
     }
 
-    private string CreateMethodSig( IEnumerable<XmlElement> usedColumns )
+    /// <summary>This method returns the C# namespace string to be used in the Surface classes.
+    /// </summary>
+    /// <param name="namespaceName"></param>
+    /// <param name="useSchemaForNamespace"></param>
+    /// <returns></returns>
+    private static string CreateNamespaceSignature( string namespaceName, Table table, bool useSchemaForNamespace )
     {
-        return string.Join( ",", usedColumns.Select( c => c.Attributes["Name"].Value ) );
-     }
+        string ret = string.Format( "namespace {0}", namespaceName );
+        if( useSchemaForNamespace )
+        {
+            ret += "." + table.Schema;
+        }
+        return ret;
+    }
 
-	/// <summary> This method creates the namespace signature.
-	/// </summary>
-	/// <param name="namespaceName"></param>
-	/// <param name="table"></param>
-	/// <param name="useSchemaForNamespace"></param>
-	/// <returns></returns>
-	private static string CreateNamespaceSignature( string namespaceName, Table table, bool useSchemaForNamespace )
-	{
-		string ret = string.Format( "namespace {0}", namespaceName );
-		if( useSchemaForNamespace )
-		{
-			ret += "." + table.Schema;
-		}
-		return ret;
-	}
-
-	private static string CreateSurfaceNamespaceSignature( string namespaceName, bool useSchemaForNamespace )
-	{
-		string ret = string.Format( "namespace {0}", namespaceName );
-		return ret;
-	}
-
+        /// <summary>This method takes a list of columns and returns a string
+    /// to be used as parameters for a method.
+    /// E.g.: "CustomerID = CustomerID, Name = Name".
+    /// </summary>
+    /// <param name="nodeList"></param>
+    /// <param name="true">Optional.  Whether to include primary key or not.</param>
+    /// <returns></returns>
     private static string CreateMethodParameterListString( 
         IEnumerable<XmlNode> nodeList, 
         bool includePrimaryKey = true )
@@ -174,6 +229,13 @@
         return string.Join( ", ", CreateMethodParameterList( nodeList, includePrimaryKey ) );
     }
 
+    /// <summary>This method takes a list of columns and returns a list
+    /// to be used as parameters for a method.
+    /// An e.g. result: ["int CustomerID", "string Name"]..
+    /// </summary>
+    /// <param name="nodeList"></param>
+    /// <param name="true">Optional.  Whether to include the primary key or not.</param>
+    /// <returns></returns>
     private static IEnumerable<string> CreateMethodParameterList( 
         IEnumerable<XmlNode> nodeList, 
         bool includePrimaryKey = true )
@@ -190,13 +252,51 @@
         }
     }
 
+    /// <summary>This method returns e.g. "CustomerID = CustomerID" for a column.
+    /// </summary>
+    /// <param name="node"></param>
+    /// <returns></returns>
+    private static string CreateObjectAssignmentParameter( XmlNode node )
+    {
+        return string.Format( "{0} = {1}", 
+            node.Attributes["Name"].Value, 
+            node.Attributes["Name"].Value
+        );        
+    }
+
+    /// <summary>This method takes a list of nodes and returns a list of them as assignments like
+    /// [ "CustomerID = CustomerID", "Name = Name" ].
+    /// </summary>
+    /// <param name="nodeList"></param>
+    /// <returns></returns>
+    private static IEnumerable<string> CreateObjectAssignmentParameterList( IEnumerable<XmlNode> nodeList )
+    {
+        return nodeList.Select( n => CreateObjectAssignmentParameter( n ) );
+    }
+
+    /// <summary>This method takes a list of columns and returns them as e.g.:
+    /// "CustomerID = CustomerID, Name = Name".
+    /// </summary>
+    /// <param name="nodeList"></param>
+    /// <returns></returns>
+    private static string CreateObjectAssignmentParameterListString( IEnumerable<XmlNode> nodeList )
+    {
+        return string.Join( ", ", CreateObjectAssignmentParameterList( nodeList ) );
+    }
+
+    /// <summary>This method takes a column and returns a string to be used
+    /// as the method parameter.
+    /// E.g.: "int CustomerID" or "int? UserID" or "string Name".
+    /// </summary>
+    /// <param name="node"></param>
+    /// <returns></returns>
     private static string CreateMethodParameter( XmlNode node )
     {
         var isNullable = bool.Parse( node.Attributes["IsNullable"].Value );
         var parameterName = node.Attributes["Name"].Value;
-		var parameterType = node.Attributes["DotnetType"].Value;
+        var parameterType = node.Attributes["DotnetType"].Value;
         var type = TypeMappings.ContainsKey( parameterType ) ? 
-			TypeMappings[parameterType] : "string";
+            TypeMappings[parameterType] : "string";
         var typeFormat       = type != "string" && isNullable ? "Nullable<{0}>" : "{0}";
         return String.Format("{0} {1}", String.Format(typeFormat,type), parameterName);
     }
@@ -206,93 +306,26 @@
     /// </summary>
     /// <param name="column"></param>
     /// <returns></returns>
-	private static string CreateMethodParameter( Column column )
-	{
+    private static string CreateMethodParameter( Column column )
+    {
         var isNullable       = column.Nullable;
         var type             = TypeMappings.ContainsKey(column.DataType.Name) ? TypeMappings[column.DataType.Name] : "string";
         var typeFormat       = type != "string" && isNullable ? "Nullable<{0}>" : "{0}";
 
         return String.Format("{0} {1}", String.Format(typeFormat,type), column.Name);
-	}
-
-    private static string CreateQuerySelectEqualParameter( XmlNode node )
-    {
-	/// <summary>This method returns e.g. "CustomerID = @CustomerID" for a column.
-	/// </summary>
-	/// <param name="node"></param>
-	/// <returns></returns>
-
-		return string.Format( "{0} = @{1}", 
-            node.Attributes["Name"].Value, 
-            node.Attributes["Name"].Value
-        );
     }
 
-	private static string CreateQueryInsertParameterListString( IEnumerable<XmlElement> columnList )
-	{
-	/// <summary>This method returns e.g. "CustomerID, Name" for a list of columns.
-	/// </summary>
-	/// <param name="columnList"></param>
-	/// <returns></returns>
-		return string.Join( ", ", columnList.Select( c => c.Attributes["Name"].Value ) );
-	}
-
-	private static string CreateQueryInsertParameterListStringWithAtSign( IEnumerable<XmlElement> columnList )
-	{
-	/// <summary>This method returns e.g. "@CustomerID, @Name" for a list of columns.
-	/// </summary>
-	/// <param name="columnList"></param>
-	/// <returns></returns>
-		return string.Join( ", ", columnList.Select( c => "@" + c.Attributes["Name"].Value ) );
-	}
-
-    private static string CreateQuerySelectEqualParameterListString( IEnumerable<XmlNode> nodeList )
+    /// <summary>This method is used for creating a unique key for what a method has as signature.
+    /// The name and return type of the method is missing by purpose; when creating methods automatically
+    /// we want to make sure that not two methods use the same signature and storing the values
+    /// returned by this method makes it possible to ferret out those methods.
+    /// </summary>
+    /// <param name="usedColumns"></param>
+    /// <returns></returns>
+    private string CreateMethodSig( IEnumerable<XmlElement> usedColumns )
     {
-	/// <summary>This method returns e.g.
-	/// "CustomerID = @CustomerID and Name = @Name" for a list of columns.
-	/// </summary>
-	/// <param name="nodeList"></param>
-	/// <returns></returns>
-        return string.Join( " and ", CreateQuerySelectEqualParameterList( nodeList ) );
-    }
-
-    private static IEnumerable<string> CreateQuerySelectEqualParameterList( IEnumerable<XmlNode> nodeList )
-    {
-	/// <summary>This method returns e.g.
-	/// [ "CustomerID = @CustomerID", "Name = @Name" ] for a list of columns.
-	/// </summary>
-	/// <param name="nodeList"></param>
-	/// <returns></returns>
-        return nodeList.Select( c => CreateQuerySelectEqualParameter( c ) );
-    }
-	
-	private static string CreateQueryUpdateAssignment( IEnumerable<XmlNode> nodeList )
-	{
-		return string.Join( ", ", 
-			nodeList.Select( c => CreateQuerySelectEqualParameter( c ) ) );
-	}
-
-    private static string CreateObjectAssignmentParameter( XmlNode node )
-    {
-	/// <summary>This method returns e.g. "CustomerID = CustomerID" for a column.
-	/// </summary>
-	/// <param name="node"></param>
-	/// <returns></returns>
-        return string.Format( "{0} = {1}", 
-            node.Attributes["Name"].Value, 
-            node.Attributes["Name"].Value
-        );        
-    }
-
-    private static IEnumerable<string> CreateObjectAssignmentParameterList( IEnumerable<XmlNode> nodeList )
-    {
-        return nodeList.Select( n => CreateObjectAssignmentParameter( n ) );
-    }
-
-    private static string CreateObjectAssignmentParameterListString( IEnumerable<XmlNode> nodeList )
-    {
-        return string.Join( ", ", CreateObjectAssignmentParameterList( nodeList ) );
-    }
+        return string.Join( ",", usedColumns.Select( c => c.Attributes["Name"].Value ) );
+     }
 
     /// <summary> This method creates a method signature.
     /// E.g.: "private void Set( CustomerID, Name )".
@@ -305,37 +338,37 @@
     /// <param name="includePrimaryKey">Whether the primary key should be included or not.
     /// New objects often can't have the PK set at the client, only in the database.</param>
     /// <returns></returns>
-	private static string CreateMethodSignature( string scope, bool isStatic, string returnType, string methodName, ColumnCollection columns, bool includePrimaryKey = true )
-	{
-		string ret = scope;
-		if( isStatic )
-		{
-			ret += " static";
-		}
-		if( false == string.IsNullOrWhiteSpace( returnType ) )
-		{
-			ret += " " + returnType;
-		}
-		ret += " " + methodName + "(";
-		if( null != columns )
-		{
-			var paramList = new List<string>();
-			foreach( Column column in columns )
-			{
-				if( column.InPrimaryKey && ! includePrimaryKey )
-				{
-					//	The column is part of the primary key and we don't want it according to parameter.
-				}
-				else
-				{
-					paramList.Add( CreateMethodParameter( column ) );
-				}
-			}
-			ret += " " + string.Join( ", ", paramList.ToArray() ) + " ";
-		}
-		ret += ")";
-		return ret;
-	}
+    private static string CreateMethodSignature( string scope, bool isStatic, string returnType, string methodName, ColumnCollection columns, bool includePrimaryKey = true )
+    {
+        string ret = scope;
+        if( isStatic )
+        {
+            ret += " static";
+        }
+        if( false == string.IsNullOrWhiteSpace( returnType ) )
+        {
+            ret += " " + returnType;
+        }
+        ret += " " + methodName + "(";
+        if( null != columns )
+        {
+            var paramList = new List<string>();
+            foreach( Column column in columns )
+            {
+                if( column.InPrimaryKey && ! includePrimaryKey )
+                {
+                    //    The column is part of the primary key and we don't want it according to parameter.
+                }
+                else
+                {
+                    paramList.Add( CreateMethodParameter( column ) );
+                }
+            }
+            ret += " " + string.Join( ", ", paramList.ToArray() ) + " ";
+        }
+        ret += ")";
+        return ret;
+    }
 
     /// <summary> This method creates all parameters for a constructor.
     /// It is not necessarily only for constructor use.  A method like "Set( CustomerID, Name, ...)"
@@ -344,50 +377,122 @@
     /// <param name="columns"></param>
     /// <param name="includePrimaryKey"></param>
     /// <returns></returns>
-	private static string CreateNamedArgumentListForConstructor( ColumnCollection columns, bool includePrimaryKey = true )
-	{
-		var assignmentList = new List<string>();
-		foreach( Column column in columns )
-		{
-			if( column.InPrimaryKey && ! includePrimaryKey )
-			{
-				//	The column is part of the primary key and we don't want it according to parameter.
-			}
-			else
-			{
-				assignmentList.Add( column.Name + " = " + column.Name );
-			}	
-		}
-		return string.Join( "," + Environment.NewLine, assignmentList.ToArray() );
-	}
-	
-    /// <summary> This method returns true if the table is among the ones that should generate code.
-    /// Typically aren't system objects and explicitly excluded tables among those.
-    /// </summary>
-    /// <param name="table">The table in question.</param>
-    /// <returns></returns>
-    private bool IsClassOkToGenerate( Table table )
+    private static string CreateNamedArgumentListForConstructor( ColumnCollection columns, bool includePrimaryKey = true )
     {
-        if( false == string.IsNullOrWhiteSpace( ExcludeTablesRegex ) &&
-            ( table.IsSystemObject || Regex.IsMatch( table.Name, ExcludeTablesRegex ) ) )
+        var assignmentList = new List<string>();
+        foreach( Column column in columns )
         {
-            return false;
-        }else{
-            return true;
+            if( column.InPrimaryKey && ! includePrimaryKey )
+            {
+                //    The column is part of the primary key and we don't want it according to parameter.
+            }
+            else
+            {
+                assignmentList.Add( column.Name + " = " + column.Name );
+            }    
         }
+        return string.Join( "," + Environment.NewLine, assignmentList.ToArray() );
     }
-
-	private string OutputProperty(Column column)
+    
+    /// <summary>This method returns e.g. "CustomerID, Name" for a list of columns.
+    /// </summary>
+    /// <param name="columnList"></param>
+    /// <returns></returns>
+    private static string CreateQueryInsertParameterListString( IEnumerable<XmlElement> columnList )
     {
-        var isNullable       = column.Nullable;
-        var type             = TypeMappings.ContainsKey(column.DataType.Name) ? TypeMappings[column.DataType.Name] : "string";
-        var typeFormat       = type != "string" && isNullable ? "Nullable<{0}>" : "{0}";
-
-        var annotations      = GetAnnotations(column);
-
-        return String.Format("{0}public {1} {2} {{ get; set; }}", annotations, String.Format(typeFormat,type), column.Name);
+        return string.Join( ", ", columnList.Select( c => c.Attributes["Name"].Value ) );
     }
 
+    /// <summary>This method returns e.g. "@CustomerID, @Name" for a list of columns.
+    /// </summary>
+    /// <param name="columnList"></param>
+    /// <returns></returns>
+    private static string CreateQueryInsertParameterListStringWithAtSign( IEnumerable<XmlElement> columnList )
+    {
+        return string.Join( ", ", columnList.Select( c => "@" + c.Attributes["Name"].Value ) );
+    }
+
+    /// <summary>This method returns e.g. "CustomerID = @CustomerID" for a column.
+    /// </summary>
+    /// <param name="node"></param>
+    /// <returns></returns>
+    private static string CreateQuerySelectEqualParameter( XmlNode node )
+    {
+        return string.Format( "{0} = @{1}", 
+            node.Attributes["Name"].Value, 
+            node.Attributes["Name"].Value
+        );
+    }
+
+    /// <summary>This method returns e.g.
+    /// "CustomerID = @CustomerID and Name = @Name" for a list of columns.
+    /// </summary>
+    /// <param name="nodeList"></param>
+    /// <returns></returns>
+    private static string CreateQuerySelectEqualParameterListString( IEnumerable<XmlNode> nodeList )
+    {
+        return string.Join( " and ", CreateQuerySelectEqualParameterList( nodeList ) );
+    }
+
+    /// <summary>This method returns e.g.
+    /// [ "CustomerID = @CustomerID", "Name = @Name" ] for a list of columns.
+    /// </summary>
+    /// <param name="nodeList"></param>
+    /// <returns></returns>
+    private static IEnumerable<string> CreateQuerySelectEqualParameterList( IEnumerable<XmlNode> nodeList )
+    {
+        return nodeList.Select( c => CreateQuerySelectEqualParameter( c ) );
+    }
+    
+    /// <summary>This method takes a list of columns and returns a string to be used
+    /// as the update part in an update query.
+    /// E.g.: "CustomerID = @CustomerID, Name = @Name".
+    /// </summary>
+    /// <param name="nodeList"></param>
+    /// <returns></returns>
+    private static string CreateQueryUpdateAssignment( IEnumerable<XmlNode> nodeList )
+    {
+        return string.Join( ", ", 
+            nodeList.Select( c => CreateQuerySelectEqualParameter( c ) ) );
+    }
+
+    /// <summary>This method returns the class signature, or class declaration if you prefer
+    /// for a surface method.
+    /// </summary>
+    /// <param name="tableName"></param>
+    /// <returns></returns>
+    private static string CreateSurfaceClassSignature( string tableName )
+    {
+        var ret = string.Format( 
+            "public {0} class {1}{2}", 
+            DTOUsePartialClass ? " partial" : "", 
+            string.Format( 
+                SurfaceClassNameFormat.IndexOf( "{0}" ) == -1 ? 
+                    "{0}" + SurfaceClassNameFormat : 
+                    SurfaceClassNameFormat, 
+                tableName 
+            ), 
+            string.IsNullOrWhiteSpace( SurfaceClassInheritFrom ) ? "" : " : " + SurfaceClassInheritFrom
+        );
+        return ret;
+   }
+    
+    /// <summary> This method creates the namespace signature.
+    /// </summary>
+    /// <param name="namespaceName"></param>
+    /// <param name="table"></param>
+    /// <param name="useSchemaForNamespace"></param>
+    /// <returns></returns>
+    private static string CreateSurfaceNamespaceSignature( string namespaceName, bool useSchemaForNamespace )
+    {
+        string ret = string.Format( "namespace {0}", namespaceName );
+        return ret;
+    }
+
+    /// <summary>This method takes a column and returns a C# property.
+    /// </summary>
+    /// <param name="col"></param>
+    /// <returns></returns>
     string GetAnnotations(Column col)
     {
       var builder = new List<string>();
@@ -405,22 +510,100 @@
       return builder.Count > 0 ? String.Format("[{0}]{1}", notations, System.Environment.NewLine) : String.Empty;
   }
 
+    /// <summary>This methods returns an XML as a formatted string.
+    /// </summary>
+    /// <param name="xmlNode"></param>
+    /// <returns></returns>    
+    private string FormatXml(XmlNode xmlNode) 
+    {         
+        //  Copied from http://forums.asp.net/t/1145533.aspx/1
+        StringBuilder bob = new StringBuilder(); 
+     
+        // We will use stringWriter to push the formated xml into our StringBuilder bob. 
+        using (StringWriter stringWriter = new StringWriter(bob)) 
+        { 
+            // We will use the Formatting of our xmlTextWriter to provide our indentation. 
+            using (XmlTextWriter xmlTextWriter = new XmlTextWriter(stringWriter)) 
+            { 
+                xmlTextWriter.Formatting = Formatting.Indented; 
+                xmlNode.WriteTo(xmlTextWriter); 
+            } 
+        } 
+     
+        return bob.ToString(); 
+    } 
+
+    /// <summary>This takes a collection of columns and returns them as a list of C# properties.
+    /// </summary>
+    /// <param name="columns"></param>
+    /// <returns></returns>
     System.Collections.Generic.IEnumerable<string> GatherProperties(ColumnCollection columns)
     {
         foreach (Column col in columns)
             yield return OutputProperty(col);
     }
 
+    /// <summary>This method returns the current project the tt file is in in Visual studio.
+    /// </summary>
+    /// <returns></returns>
+    public EnvDTE.Project GetCurrentProject()
+    {
+        var serviceProvider             = (IServiceProvider)Host;
+        var dte                         = (EnvDTE.DTE)serviceProvider.GetService(typeof(EnvDTE.DTE));
+        var currentSlnProjects          = (Array)dte.ActiveSolutionProjects;
+
+        return (EnvDTE.Project)currentSlnProjects.GetValue(0);
+    }
+    
+    /// <summary>This method inserts an XML comment before the element sent as parameter.
+    /// Feel free to create one that appends an XML comment too.
+    /// </summary>
+    /// <param name="element"></param>
+    /// <param name="comment"></param>
+    /// <returns></returns>
+    private XmlComment InsertCommentBefore( XmlElement element, string comment )
+    {
+        var newCommentElement = element.OwnerDocument.CreateComment( comment );
+        element.ParentNode.InsertBefore( newCommentElement, element );
+        return newCommentElement;
+    }
+
+    /// <summary> This method returns true if the table is among the ones that should generate code.
+    /// Typically aren't system objects and explicitly excluded tables among those.
+    /// </summary>
+    /// <param name="table">The table in question.</param>
+    /// <returns></returns>
+    private bool IsClassOkToGenerate( Table table )
+    {
+        if( false == string.IsNullOrWhiteSpace( ExcludeTablesRegex ) &&
+            ( table.IsSystemObject || Regex.IsMatch( table.Name, ExcludeTablesRegex ) ) )
+        {
+            return false;
+        }else{
+            return true;
+        }
+    }
+
+    /// <summary>This method writes the text in the paramter.
+    /// </summary>
+    /// <param name="stuff"></param>
     void Out(string stuff)
     {
 #><#= stuff + System.Environment.NewLine #><#+
     }
 
+    /// <summary>This method writes the text in the parameter formatted like string.Format(...).
+    /// </summary>
+    /// <param name="stuff"></param>
+    /// <param name="args"></param>
     void Out(string stuff, params object[] args)
     {
 #><#= String.Format(stuff, args) + System.Environment.NewLine #><#+
     }
 
+    /// <summary>This method writes text with proper line break indentations.
+    /// </summary>
+    /// <param name="stuff"></param>
     private void Out_Text( string stuff )
     {
         // http://msdn.microsoft.com/en-us/library/system.stringsplitoptions.aspx
@@ -438,12 +621,12 @@
 
         // First find the amount of indentation the first line of the source text has.  We must
         // remove this indentation from every row before outputting.
-		//	We must also decide if there are leading tabs or spaces.  We prefer spacex4 in 
-		//	this file but sometimes a tab creeps in.
+        //    We must also decide if there are leading tabs or spaces.  We prefer spacex4 in 
+        //    this file but sometimes a tab creeps in.
         var charIndentCount = stuffList.First().ToCharArray().TakeWhile( c => c == ' ' ).Count();
         var tabIndentCount = stuffList.First().ToCharArray().TakeWhile( c => c == '\t' ).Count();
-		var indentCount = Math.Max( charIndentCount, tabIndentCount );
-		
+        var indentCount = Math.Max( charIndentCount, tabIndentCount );
+        
         foreach( string t in stuffList )
         {
             if( t.Length >= indentCount )
@@ -457,92 +640,106 @@
         }
     }
 
+    /// <summary>This method writes formatted text with proper line break indentations.
+    /// It also contains the possibility for formatting according to string.Format(...).
+    /// </summary>
+    /// <param name="stuff"></param>
+    /// <param name="args"></param>
     void Out_Text(string stuff, params object[] args)
     {
         Out_Text( String.Format(stuff, args) );
     }
 
-    string SaveOutput(string outputFileName)
-    {
-        // By some reason unknown to me the file the string contains a leading whitespace.  Hence the Trim.
-        // This happened to me while writing an XML file which doesn't tolerate a leading whitespace. /OF
-      var content = this.GenerationEnvironment.ToString().Trim();
-
-      string templateDirectory = Path.GetDirectoryName(Host.TemplateFile);
-      string outputFilePath = Path.Combine(templateDirectory, outputFileName);
-
-        File.WriteAllText(outputFilePath, content);
-
-      this.GenerationEnvironment.Remove(0, this.GenerationEnvironment.Length);
-
-        return outputFilePath;
-    }
-
+    /// <summary>This method writes a DTO class file.
+    /// It's inner construction is a remain since the ST4bby days in that it uses the
+    /// Microsoft.SqlServer.Management.Smo for data and not the XML file.
+    /// </summary>
+    /// <param name="namespaceName"></param>
+    /// <param name="table"></param>
     void OutputClass(string namespaceName, Table table)
     {
-		Out("// This class is automatically generated by MooDAL {0}.", System.DateTime.Now.ToString());
-		Out("// Read more at https://github.com/jbubriski/MooDAL/");
-		Out("");
-		Out( CreateNamespaceSignature( namespaceName, table, UseSchemaForNamespace ) );
-		Out("{");
-		PushIndent("\t");
-			Out("using System;");
-			Out("using System.ComponentModel.DataAnnotations;");
-			Out( "" );
-			Out( CreateDTOClassSignature( table ) );
-			Out("{");
-			PushIndent("\t");
-				//	Properties.
-				var properties = GatherProperties(table.Columns);
-				Out(String.Join(System.Environment.NewLine, properties));
-		
-				//	Static constructors.
-				if( false == string.IsNullOrWhiteSpace( DTONameOfStaticConstructor ) )
-				{
-					Out("");
-			        Out( "/// <summary> This static constructor takes all fields but the primary key." );
-			        Out( "/// </summary>");
-			        Out( "/// <returns></returns>");
-					Out( CreateMethodSignature( "public", true, table.Name, DTONameOfStaticConstructor, table.Columns, includePrimaryKey : false ) );
-					Out("{");
-					PushIndent("\t");
-						Out( "return new " + table.Name + "()" );
-						Out( "{" );
-						PushIndent("\t");
-							Out( CreateNamedArgumentListForConstructor( table.Columns, includePrimaryKey : false ) );
-						PopIndent();
-						Out( "};" );
-					PopIndent();
-					Out("}");
-					Out("");
-			        Out( "/// <summary> This static constructor takes all fields including the primary key." );
-			        Out( "/// </summary>");
-			        Out( "/// <returns></returns>");
-					Out( CreateMethodSignature( "public", true, table.Name, DTONameOfStaticConstructor, table.Columns ) );
-					Out("{");
-					PushIndent("\t");
-						Out( "return new " + table.Name + "()" );
-						Out( "{" );
-						PushIndent("\t");
-							Out( CreateNamedArgumentListForConstructor( table.Columns, includePrimaryKey : true ) );
-						PopIndent();
-						Out( "};" );
-					PopIndent();
-					Out("}");
-				}
-			PopIndent();
-			Out("}");
-		PopIndent();
-		Out("}");
+        Out("// This class is automatically generated by MooDAL {0}.", System.DateTime.Now.ToString());
+        Out("// Read more at https://github.com/jbubriski/MooDAL/");
+        Out("");
+        Out( CreateNamespaceSignature( namespaceName, table, UseSchemaForNamespace ) );
+        Out("{");
+        PushIndent("\t");
+            Out("using System;");
+            Out("using System.ComponentModel.DataAnnotations;");
+            Out( "" );
+            Out( CreateDTOClassSignature( table ) );
+            Out("{");
+            PushIndent("\t");
+                //    Properties.
+                var properties = GatherProperties(table.Columns);
+                Out(String.Join(System.Environment.NewLine, properties));
+        
+                //    Static constructors.
+                if( false == string.IsNullOrWhiteSpace( DTONameOfStaticConstructor ) )
+                {
+                    Out("");
+                    Out( "/// <summary> This static constructor takes all fields but the primary key." );
+                    Out( "/// </summary>");
+                    Out( "/// <returns></returns>");
+                    Out( CreateMethodSignature( "public", true, table.Name, DTONameOfStaticConstructor, table.Columns, includePrimaryKey : false ) );
+                    Out("{");
+                    PushIndent("\t");
+                        Out( "return new " + table.Name + "()" );
+                        Out( "{" );
+                        PushIndent("\t");
+                            Out( CreateNamedArgumentListForConstructor( table.Columns, includePrimaryKey : false ) );
+                        PopIndent();
+                        Out( "};" );
+                    PopIndent();
+                    Out("}");
+                    Out("");
+                    Out( "/// <summary> This static constructor takes all fields including the primary key." );
+                    Out( "/// </summary>");
+                    Out( "/// <returns></returns>");
+                    Out( CreateMethodSignature( "public", true, table.Name, DTONameOfStaticConstructor, table.Columns ) );
+                    Out("{");
+                    PushIndent("\t");
+                        Out( "return new " + table.Name + "()" );
+                        Out( "{" );
+                        PushIndent("\t");
+                            Out( CreateNamedArgumentListForConstructor( table.Columns, includePrimaryKey : true ) );
+                        PopIndent();
+                        Out( "};" );
+                    PopIndent();
+                    Out("}");
+                }
+            PopIndent();
+            Out("}");
+        PopIndent();
+        Out("}");
     }
 
+    /// <summary>This method writes a column as a C# property.
+    /// </summary>
+    /// <param name="column"></param>
+    /// <returns></returns>
+    private string OutputProperty(Column column)
+    {
+        var isNullable       = column.Nullable;
+        var type             = TypeMappings.ContainsKey(column.DataType.Name) ? TypeMappings[column.DataType.Name] : "string";
+        var typeFormat       = type != "string" && isNullable ? "Nullable<{0}>" : "{0}";
+
+        var annotations      = GetAnnotations(column);
+
+        return String.Format("{0}public {1} {2} {{ get; set; }}", annotations, String.Format(typeFormat,type), column.Name);
+    }
+
+    /// <summary>This method writes all Surface files.
+    /// </summary>
+    /// <param name="namespaceName"></param>
+    /// <param name="document"></param>
     private void OutputSurface( string namespaceName, XmlDocument document )
     {
-		//	Create Surface class output directory if needed.
-		var surfaceClassOutputDirectory = Path.Combine( Path.GetDirectoryName(Host.TemplateFile), SurfaceOutputPath );
-		if( false == Directory.Exists( surfaceClassOutputDirectory ) ){
-			Directory.CreateDirectory( surfaceClassOutputDirectory );
-		}
+        //    Create Surface class output directory if needed.
+        var surfaceClassOutputDirectory = Path.Combine( Path.GetDirectoryName(Host.TemplateFile), SurfaceOutputPath );
+        if( false == Directory.Exists( surfaceClassOutputDirectory ) ){
+            Directory.CreateDirectory( surfaceClassOutputDirectory );
+        }
 
         // We don't handle schema so two tables with the same name, in different schemas, 
         // will mess up the code generation.
@@ -556,26 +753,31 @@
         }
     }
 
+    /// <summary>This method writes the file for a Surface class.
+    /// </summary>
+    /// <param name="namespaceName"></param>
+    /// <param name="tableElement"></param>
+    /// <returns></returns>
     private string OutputSurfaceFile( string namespaceName, XmlElement tableElement)
     {
         var tableName = tableElement.Attributes["Name"].Value;
 
         ClearIndent();
-		Out("// This class is automatically generated by MooDAL {0}.", System.DateTime.Now.ToString());
-		Out("// Read more at https://github.com/jbubriski/MooDAL/");
-		Out("");
-		Out( "using System;");
+        Out("// This class is automatically generated by MooDAL {0}.", System.DateTime.Now.ToString());
+        Out("// Read more at https://github.com/jbubriski/MooDAL/");
+        Out("");
+        Out( "using System;");
         Out( "using System.Collections.Generic;" );
-		Out( "using System.ComponentModel.DataAnnotations;");
+        Out( "using System.ComponentModel.DataAnnotations;");
         Out( "using System.Linq;");
         Out( "using Dapper;");
-		Out( "" );
-		Out( CreateSurfaceNamespaceSignature( namespaceName, UseSchemaForNamespace ) );
-		Out("{");
-		PushIndent("\t");
-			Out( CreateSurfaceClassSignature( tableName ) );
-			Out("{");
-			PushIndent("\t");
+        Out( "" );
+        Out( CreateSurfaceNamespaceSignature( namespaceName, UseSchemaForNamespace ) );
+        Out("{");
+        PushIndent("\t");
+            Out( CreateSurfaceClassSignature( tableName ) );
+            Out("{");
+            PushIndent("\t");
 
             //  Find all colums for the Table.
             var columnList = ToList( tableElement.SelectNodes( "Columns/Column" ) ).Cast<XmlElement>();
@@ -588,491 +790,16 @@
 
             Out_SurfaceDeleteMethods( tableName, tableElement, columnList );
                 
-			PopIndent();
-			Out("}");
-		PopIndent();
-		Out("}");
+            PopIndent();
+            Out("}");
+        PopIndent();
+        Out("}");
         return string.Format( SurfaceFileNameFormat, tableName );
     }
     
-    private void Out_SurfaceRetrieveMethods( 
-        string tableName, 
-        XmlElement tableElement, 
-        IEnumerable<XmlElement> columnList )
-    {
-        //  We have a problem where an index and a fk points at the same columns.
-        //  In those cases we get two identical methods; which we can't have.
-        //  Each method declares a unique signature due to its parameters.
-        //  The solution is such:
-        //  We store the unique parameters for each method created.  The
-        //  parameters are created from the columns used so if we store the 
-        //  columns we also have a unique identificator of each method.
-        //  Then we make sure the same signature is not used twice.
-        var methodSigList = new HashSet<string>();
-
-        //  Start by creating a FindAll method.
-        Out_Comment( "This method returns all records in the table " + tableName + "." );
-        Out_Text( @"
-            public List<{0}.{1}{2}> FindAll()
-            {{
-                using( var conn = CreateConnection() )
-                {{
-                    conn.Open();
-                    var res = conn.Query<{0}.{1}{2}>( {3} );
-                    return res.ToList();
-                }}
-            }}", 
-            DTONameSpaceName, 
-			UseSchemaForNamespace ?
-				tableElement.Attributes[ "Schema" ].Value + "." :
-				"", 
-            tableName, 
-            "\"select * from " + 
-			( UseSchemaForNamespace ?
-				tableElement.Attributes[ "Schema" ].Value + "." :
-				"" ) + 
-			tableName + "\""
-        );
-        Out( "" );
-
-        //  Find all the indexes for the table.
-        var ixNodeList = ToList( tableElement.SelectNodes( "Indexes/Index" ) ).Cast<XmlElement>();
-        Out_SurfaceRetrieveMethods( tableName, tableElement, columnList, ixNodeList, methodSigList );
-
-        // Find every FK for the Table.  We want 1 method per FK since every FK can be searched on.
-        var fkNodeList = ToList( tableElement.SelectNodes( "ForeignKeys/ForeignKey" ) ).Cast<XmlElement>();
-        Out_SurfaceRetrieveMethods( tableName, tableElement, columnList, fkNodeList, methodSigList );
-    }
-
-    private void Out_SurfaceRetrieveMethods( 
-        string tableName, 
-        XmlElement tableElement, 
-        IEnumerable<XmlElement> columnList, 
-        IEnumerable<XmlElement> ixfkNodeList, 
-        HashSet<string> methodSigList )
-    {
-        //  Loop the indexes/fks and create one Find-method per index or fk.
-        foreach( XmlElement indexElement in ixfkNodeList )
-        {
-            //  Filter out the columns that are used for this index.
-            //  Note that the table's columns come from tableElement->Columns/Column
-            //  while the index's columns come from indexElement->Columns/Column.
-            var usedColumns = ColumnsFromIndexOrForeignKey( indexElement, columnList );
-
-            var paramString = CreateMethodSig( usedColumns );
-            if( methodSigList.Contains( paramString ) )
-            {
-                Out( "// There is already a method with parameter(s) {0}.  Do you have redundant indexes or foreign keys?", paramString );
-                Out( "" );
-            }
-            else
-            {
-                methodSigList.Add( paramString );    // Add the new unique string of method parameters.
-
-				XmlAttribute indexTypeAttribute = indexElement.Attributes["IndexType"];
-				bool isPrimaryKey = 
-					usedColumns.All( c => bool.Parse( c.Attributes["IsPrimaryKey"].Value ) );
-                string indexName = indexElement.Attributes["Name"].Value;
-
-				Out_SurfaceRetrieveMethod( 
-					tableName, 
-					UseSchemaForNamespace ?
-						tableElement.Attributes[ "Schema" ].Value :
-						null, 
-					indexName, 
-					usedColumns, 
-					isPrimaryKey );
-                Out( "" );
-            }
-        }
-    }
-
-    private void Out_SurfaceRetrieveMethod( 
-		string tableName, 
-		string schemaName, 
-		string indexName, 
-		IEnumerable<XmlNode> columnsUsedInIxFk, 
-		bool isPrimaryKey )
-    {
-        Out_Comment( 
-            string.Format( @"This method uses the {1} index{0}for searching of field(s) {2}.{3}", 
-                Environment.NewLine, 
-				indexName, 
-                string.Join( " and ", columnsUsedInIxFk.Select( n=>n.Attributes["Name"].Value ) ), 
-				isPrimaryKey ?
-					Environment.NewLine + "The index is the primary key." :
-					"" 
-            ), 
-            columnsUsedInIxFk.Select( c => c.Attributes["Name"].Value ), 
-			""
-        );
-
-        // TODO: Move method signature creator to a method of its own.		
-		var s = "public ";
-		if( false == isPrimaryKey ){
-			s += "IEnumerable<";
-		}
-		s += 
-			DTONameSpaceName + "." + 
-			( UseSchemaForNamespace ? schemaName + "." : "" ) +
-			tableName;
-		if( false == isPrimaryKey ){
-			s += ">";
-		}
-		s += " Retrieve";
-		s += ( isPrimaryKey ?
-			"" :
-			"By" +
-            string.Join( "And", columnsUsedInIxFk.Select( c => c.Attributes["Name"].Value ) )
-		);
-		s += "( " +
-		    CreateMethodParameterListString( columnsUsedInIxFk ) +
-			" )";
-		
-		Out( s );
-		Out_Text( @"
-			{{
-				var ctx = MakeConnectionAndTransaction();
-				var res = ctx.Conn.Query<{0}.{1}{2}>( 
-					{3},
-					{4},
-					transaction: ctx.Trans );
-					return res{5};
-			}}", 
-				DTONameSpaceName, 
-				UseSchemaForNamespace ?
-					schemaName + "." :
-					"", 
-				tableName, 
-				"\"select * from " + 
-					( UseSchemaForNamespace ?
-						schemaName + "." :
-						"" ) + 
-					tableName + 
-					" where " + CreateQuerySelectEqualParameterListString( columnsUsedInIxFk ) + "\"", 
-                "new { " + CreateObjectAssignmentParameterListString( columnsUsedInIxFk ) + " }", 
-				( isPrimaryKey ? ".Single()" : "" )
-			);
-    }
-
-    private void Out_SurfaceCreateMethods( 
-        string tableName, 
-        XmlElement tableElement, 
-        IEnumerable<XmlElement> columnList )
-    {
-		Out_SurfaceCreateMethod(
-			tableName, 
-			tableElement.Attributes["Schema"].Value, 
-			tableElement, 
-			columnList.Where( c => bool.Parse( c.Attributes["IsPrimaryKey"].Value ) == false )
-		);
-    }
-	
-    private void Out_SurfaceCreateMethod( 
-        string tableName, 
-		string schemaName, 
-        XmlElement tableElement, 
-        IEnumerable<XmlElement> columnList )
-    {
-        Out_Comment(
-            "This method inserts every field in the " + tableName + " table" +
-            " exclusive the primary key(s).", 
-            columnList.Select( c => c.Attributes["Name"].Value )
-        );
-
-		// TODO: Move method signature creator to a method of its own.
-		Out_Text( "public int Insert( {0} )", 
-        	CreateMethodParameterListString( columnList )
-        );
-		
-		Out_Text( @"
-			{{
-				var ctx = MakeConnectionAndTransaction();
-				ctx.Conn.Execute( 
-					{0}, 
-					{1},
-					ctx.Trans
-				);
-				var res = ctx.Conn.Query<float>(
-					{2},
-					ctx.Trans
-				);
-				return (int)res.Single();
-			}}"
-		, 
-			"\"insert into " + 
-				( UseSchemaForNamespace ?
-					schemaName + "." :
-					""
-				) + 
-				tableName +
-				" ( " + CreateQueryInsertParameterListString( columnList ) + " )" +
-				" values( " + CreateQueryInsertParameterListStringWithAtSign( columnList ) + " )\"",
-			"new { " + CreateObjectAssignmentParameterListString( columnList ) + "}", 
-			"\"select @@identity\""
-		);
-		Out( "" );
-	}
-	
-    private void Out_SurfaceUpdateMethods(
-        string tableName, 
-        XmlElement tableElement, 
-        IEnumerable<XmlElement> columnList )
-    {
-        // Out_SurfaceUpdateMethod( tableName, tableElement, 
-        //    columnList.Where( c => bool.Parse( c.Attributes["IsPrimaryKey"].Value ) == false ), 
-        //    false
-        //);
-        Out_SurfaceUpdateMethod( tableName, tableElement, columnList, true );
-    }
-
-    private void Out_SurfaceUpdateMethod(
-        string tableName, 
-        XmlElement tableElement, 
-        IEnumerable<XmlElement> columnList, 
-        bool includePrimaryKey )
-    {
-		// TODO: Make it possible to set setting for reading the record after writing it. Issue #4.
-        
-		Out_Comment(
-            "This method updates every field in the " + tableName + " table.", 
-            // ( includePrimaryKey ? "." : " exclusive the primary key(s)." ), 
-            columnList.Select( c => c.Attributes["Name"].Value )
-        );
-
-        // TODO: Move method signature creator to a method of its own.
-		Out( "public void Update( {0} )", 
-            CreateMethodParameterListString( columnList )
-        );
-        Out( "{" );
-        PushIndent( "\t" );
-            Out_Text( @"
-				var ctx = MakeConnectionAndTransaction();
-				ctx.Conn.Execute(
-					{0},
-					{1}, 
-					ctx.Trans);", 
-                string.Format( 
-                    "\"update {1}{2} set {3} where {4}\"", 
-                    Environment.NewLine, 
-					UseSchemaForNamespace ?
-						tableElement.Attributes[ "Schema" ].Value + "." :
-						"", 
-                    tableName, 
-                    CreateQueryUpdateAssignment( 
-						columnList.Where( c => false  == bool.Parse( c.Attributes["IsPrimaryKey"].Value ) ) ), 
-					CreateQuerySelectEqualParameterListString( 
-						columnList.Where( c => true  == bool.Parse( c.Attributes["IsPrimaryKey"].Value ) ) )
-                    ), 
-                string.Format( 
-                    "new {{ {0} }}", 
-                    CreateObjectAssignmentParameterListString( columnList ) )
-             );
-        PopIndent();
-        Out( "}" );
-        Out( "" );
-    }
-
-    private void Out_SurfaceDeleteMethods( 
-        string tableName, 
-        XmlElement tableElement, 
-        IEnumerable<XmlElement> columnList )
-    {
-        //  We have a problem where an index and a fk points at the same columns.
-        //  In those cases we get two identical methods; which we can't have.
-        //  Each method declares a unique signature due to its parameters.
-        //  The solution is such:
-        //  We store the unique parameters for each method created.  The
-        //  parameters are created from the columns used so if we store the 
-        //  columns we also have a unique identificator of each method.
-        //  Then we make sure the same signature is not used twice.
-        var methodSigList = new HashSet<string>();
-
-        Out_Comment( "This method deletes all records in the " + tableName + " table." );
-        Out_Text( @"
-            public void DeleteAll()
-            {{
-                using( var conn = CreateConnection() )
-                {{
-                    conn.Open();
-                    conn.Execute( {0} );
-                }}
-            }}", 
-            "\"delete from " + 
-			( UseSchemaForNamespace ?
-				tableElement.Attributes[ "Schema" ].Value + "." :
-				"" ) + 
-			tableName + 
-			"\""  );
-        Out( "" );
-            
-        //  Find all the indexes for the table.
-        var ixNodeList = ToList( tableElement.SelectNodes( "Indexes/Index" ) ).Cast<XmlElement>();
-        Out_SurfaceDeleteMethods( tableName, tableElement, columnList, ixNodeList, methodSigList );
-
-        // Find every FK for the Table.  We want 1 method per FK since every FK can be searched on.
-        var fkNodeList = ToList( tableElement.SelectNodes( "ForeignKeys/ForeignKey" ) ).Cast<XmlElement>();
-        Out_SurfaceDeleteMethods( tableName, tableElement, columnList, fkNodeList, methodSigList );
-        
-    }
-
-    private static IEnumerable<XmlElement> ColumnsFromIndexOrForeignKey(
-        XmlElement indexOrFkElement, 
-        IEnumerable<XmlElement> columnList )
-    {
-        //  Filter out the columns that are used for this index.
-        //  Note that the table's columns come from tableElement->Columns/Column
-        //  while the index's columns come from indexElement->Columns/Column.
-        var usedColumns = 
-            from c in columnList
-            where ToList( indexOrFkElement.SelectNodes( "Columns/Column" ) )
-                .Select( ic => ic.Attributes["Name"].Value ).ToList()
-                .Contains( c.Attributes["Name"].Value )
-            select c;
-        return usedColumns;
-    }
-
-    private void Out_SurfaceDeleteMethods( 
-        string tableName, 
-        XmlElement tableElement, 
-        IEnumerable<XmlElement> columnList, 
-        IEnumerable<XmlElement> ixfkNodeList, 
-        HashSet<string> methodSigList )
-    {
-        //  Loop the indexes/fks and create one Find-method per index or fk.
-        foreach( XmlElement indexElement in ixfkNodeList )
-        {
-            //  Filter out the columns that are used for this index.
-            //  Note that the table's columns come from tableElement->Columns/Column
-            //  while the index's columns come from indexElement->Columns/Column.
-            var usedColumns = ColumnsFromIndexOrForeignKey( indexElement, columnList );
-
-            var paramString = CreateMethodSig( usedColumns );
-            if( methodSigList.Contains( paramString ) )
-            {
-                Out( "// There is already a method with parameter(s) {0}.  Do you have redundant indexes or foreign keys?", paramString );
-                Out( "" );
-            }
-            else
-            {
-                methodSigList.Add( paramString );    // Add the new unique string of method parameters.
-
-				var isPrimaryKey = usedColumns.
-					All( c => bool.Parse( c.Attributes["IsPrimaryKey"].Value ) );
-             
-				Out_SurfaceDeleteMethod( 
-					tableName, 
-					tableElement.Attributes[ "Schema" ].Value, 
-					indexElement.Attributes["Name"].Value, 
-					isPrimaryKey, 
-					usedColumns );
-                Out( "" );
-            }
-        }
-    }
-	
-	private void Out_SurfaceDeleteMethod( 
-		string tableName, 
-		string schemaName, 
-		string ixfkName, 
-		bool isPrimaryKey, 
-		IEnumerable<XmlNode> columnsUsedInIxFk )
-    {
-		var formattedTableName = 
-			UseSchemaForNamespace ?
-				schemaName + "." + tableName :
-				tableName;
-
-        Out_Comment( 
-            string.Format( @"This method uses the {1} index/fk{0}for deleting a record.  Filtering is dune by field(s) {2}.{3}", 
-                Environment.NewLine, 
-                ixfkName, 
-                string.Join( " and ", columnsUsedInIxFk.Select( n=>n.Attributes["Name"].Value ) ), 
-				isPrimaryKey ?
-					Environment.NewLine + "The parameter(s) is the primary key." :
-					""
-            ), 
-            columnsUsedInIxFk.Select( c => c.Attributes["Name"].Value ), 
-            null
-        );
-
-        // TODO: Move method signature creator to a method of its own.
-        Out( "public void Delete{0}( {1} )", 
-			isPrimaryKey ?
-				"" :
-             	"By" + string.Join( "And", columnsUsedInIxFk.Select( c => c.Attributes["Name"].Value ) ), 
-            CreateMethodParameterListString( columnsUsedInIxFk )
-            );
-		Out("{");
-        PushIndent("\t");
-            Out_Text( @"
-                var ctx = MakeConnectionAndTransaction();
-                ctx.Conn.Open();
-                ctx.Conn.Execute( 
-                    {0}, 
-                    {1} );", 
-                string.Format( 
-                    "\"delete from {0} where {1}\"", 
-                    formattedTableName, 
-                    CreateQuerySelectEqualParameterListString( columnsUsedInIxFk )
-                ), 
-                string.Format( 
-                    "new {{ {0} }}", 
-                    CreateObjectAssignmentParameterListString( columnsUsedInIxFk ) )
-            );
-        PopIndent();
-		Out("}");
-    }
-
-    private void Out_Comment( string summaryText, IEnumerable<string> parameterList = null, string returnText = null )
-    {
-
-        //  Print the Summary part.
-        var summaryTextArray = Regex.Split( summaryText, Environment.NewLine );
-        for( var i=0 ; i<summaryTextArray.Count() ; ++i )
-        {
-            if( i == 0 )
-            {
-                Out( "/// <summary>" + summaryTextArray[0] );
-            }
-            else
-            {
-                Out( " /// " + summaryTextArray[i] );
-            }
-        }
-        Out( "/// </summary>" );
-
-        //  Print the Parameters part.
-        if( parameterList != null )
-        {
-            foreach( string parameter in parameterList )
-            {
-                Out( "/// <param name=\"" + parameter + "\"></param>" );
-            }
-        }
-
-        //  Print the Returns part.
-        if( returnText != null )
-        {
-            // TODO: Create a proper return text split as with Summary.  Issue #2.
-            Out( "/// <returns>" + returnText + "</returns>" );
-        }
-    }
-
-    private static List<XmlNode> ToList( XmlNodeList nodeList )
-    {
-        // I would have preferred to use AsQueryable as MSDN says.  But I can't get it to work. /OF
-        //  http://msdn.microsoft.com/en-us/library/system.xml.xmlnodelist.aspx
-        // E.g.: var x = fkElement.SelectNodes( "Columns/Column" ).AsQueryable();
-
-        var ret = new List<XmlNode>();
-        foreach( XmlNode node in nodeList )
-        {
-            ret.Add( node );
-        }
-        return ret;
-    }
-
+    /// <summary>This method writes chosen parts of the database's schema to a file.
+    /// </summary>
+    /// <param name="database"></param>
     private void OutputXml( Database database )
     {
         //  http://msdn.microsoft.com/en-us/library/microsoft.sqlserver.management.smo.aspx
@@ -1190,55 +917,555 @@
         Out( FormatXml( doc ) );
     }
 
-    private XmlComment InsertCommentBefore( XmlElement element, string comment )
+    /// <summary>This method prints XML comments for a method.
+    /// </summary>
+    /// <param name="summaryText">The summary text.  Line breaks are formatted accordingly.</param>
+    /// <param name="null">Optional.  If passed along, param lines will be written.</param>
+    /// <param name="null">Optional. If passed along a returns line will be written.  This has, as of yet, not correctly formatted line breaks.  Feel free to implement.</param>
+    private void Out_Comment( string summaryText, IEnumerable<string> parameterList = null, string returnText = null )
     {
-        var newCommentElement = element.OwnerDocument.CreateComment( comment );
-        element.ParentNode.InsertBefore( newCommentElement, element );
-        return newCommentElement;
+
+        //  Print the Summary part.
+        var summaryTextArray = Regex.Split( summaryText, Environment.NewLine );
+        for( var i=0 ; i<summaryTextArray.Count() ; ++i )
+        {
+            if( i == 0 )
+            {
+                Out( "/// <summary>" + summaryTextArray[0] );
+            }
+            else
+            {
+                Out( " /// " + summaryTextArray[i] );
+            }
+        }
+        Out( "/// </summary>" );
+
+        //  Print the Parameters part.
+        if( parameterList != null )
+        {
+            foreach( string parameter in parameterList )
+            {
+                Out( "/// <param name=\"" + parameter + "\"></param>" );
+            }
+        }
+
+        //  Print the Returns part.
+        if( returnText != null )
+        {
+            // TODO: Create a proper return text split as with Summary.  Issue #2.
+            Out( "/// <returns>" + returnText + "</returns>" );
+        }
     }
 
-    private XmlAttribute AppendAttribute( XmlElement element, string name, string value )
+    /// <summary>This method writes a create method for a table and index/foreign key.
+    /// </summary>
+    /// <param name="tableName"></param>
+    /// <param name="schemaName"></param>
+    /// <param name="tableElement"></param>
+    /// <param name="columnList"></param>
+    private void Out_SurfaceCreateMethod( 
+        string tableName, 
+        string schemaName, 
+        XmlElement tableElement, 
+        IEnumerable<XmlElement> columnList )
     {
-        var newAttribute = element.OwnerDocument.CreateAttribute( name );
-        newAttribute.Value = value;
-        element.Attributes.Append( newAttribute );
-        return newAttribute;
+        Out_Comment(
+            "This method inserts every field in the " + tableName + " table" +
+            " exclusive the primary key(s).", 
+            columnList.Select( c => c.Attributes["Name"].Value )
+        );
+
+        // TODO: Move method signature creator to a method of its own.
+        Out_Text( "public int Insert( {0} )", 
+            CreateMethodParameterListString( columnList )
+        );
+        
+        Out_Text( @"
+            {{
+                var ctx = MakeConnectionAndTransaction();
+                ctx.Conn.Execute( 
+                    {0}, 
+                    {1},
+                    ctx.Trans
+                );
+                var res = ctx.Conn.Query<float>(
+                    {2},
+                    ctx.Trans
+                );
+                return (int)res.Single();
+            }}"
+        , 
+            "\"insert into " + 
+                ( UseSchemaForNamespace ?
+                    schemaName + "." :
+                    ""
+                ) + 
+                tableName +
+                " ( " + CreateQueryInsertParameterListString( columnList ) + " )" +
+                " values( " + CreateQueryInsertParameterListStringWithAtSign( columnList ) + " )\"",
+            "new { " + CreateObjectAssignmentParameterListString( columnList ) + "}", 
+            "\"select @@identity\""
+        );
+        Out( "" );
+    }
+    
+    /// <summary>This methods writes all (that is 1) update methods for a table.
+    /// It is just a pass through method.  Feel free to remove; it is a remains.
+    /// </summary>
+    /// <param name="tableName"></param>
+    /// <param name="tableElement"></param>
+    /// <param name="columnList"></param>
+    private void Out_SurfaceUpdateMethods(
+        string tableName, 
+        XmlElement tableElement, 
+        IEnumerable<XmlElement> columnList )
+    {
+        Out_SurfaceUpdateMethod( tableName, tableElement, columnList );
     }
 
-    private XmlAttribute AppendAttribute( XmlElement element, string name, bool value )
+    /// <summary>This method writes all create methods for a table.
+    /// </summary>
+    /// <param name="tableName"></param>
+    /// <param name="tableElement"></param>
+    /// <param name="columnList"></param>
+    private void Out_SurfaceCreateMethods( 
+        string tableName, 
+        XmlElement tableElement, 
+        IEnumerable<XmlElement> columnList )
     {
-        return AppendAttribute( element, name, value.ToString() );
+        Out_SurfaceCreateMethod(
+            tableName, 
+            tableElement.Attributes["Schema"].Value, 
+            tableElement, 
+            columnList.Where( c => bool.Parse( c.Attributes["IsPrimaryKey"].Value ) == false )
+        );
+    }
+    
+    /// <summary>This method writes all delete methods for a table.
+    /// There is one DeleteAll method written and there is one DeleteByXxx written
+    /// for every index and foreign key.
+    /// </summary>
+    /// <param name="tableName"></param>
+    /// <param name="tableElement"></param>
+    /// <param name="columnList"></param>
+    private void Out_SurfaceDeleteMethods( 
+        string tableName, 
+        XmlElement tableElement, 
+        IEnumerable<XmlElement> columnList )
+    {
+        //  We have a problem where an index and a fk points at the same columns.
+        //  In those cases we get two identical methods; which we can't have.
+        //  Each method declares a unique signature due to its parameters.
+        //  The solution is such:
+        //  We store the unique parameters for each method created.  The
+        //  parameters are created from the columns used so if we store the 
+        //  columns we also have a unique identificator of each method.
+        //  Then we make sure the same signature is not used twice.
+        var methodSigList = new HashSet<string>();
+
+        Out_Comment( "This method deletes all records in the " + tableName + " table." );
+        Out_Text( @"
+            public void DeleteAll()
+            {{
+                using( var conn = CreateConnection() )
+                {{
+                    conn.Open();
+                    conn.Execute( {0} );
+                }}
+            }}", 
+            "\"delete from " + 
+            ( UseSchemaForNamespace ?
+                tableElement.Attributes[ "Schema" ].Value + "." :
+                "" ) + 
+            tableName + 
+            "\""  );
+        Out( "" );
+            
+        //  Find all the indexes for the table.
+        var ixNodeList = ToList( tableElement.SelectNodes( "Indexes/Index" ) ).Cast<XmlElement>();
+        Out_SurfaceDeleteMethods( tableName, tableElement, columnList, ixNodeList, methodSigList );
+
+        // Find every FK for the Table.  We want 1 method per FK since every FK can be searched on.
+        var fkNodeList = ToList( tableElement.SelectNodes( "ForeignKeys/ForeignKey" ) ).Cast<XmlElement>();
+        Out_SurfaceDeleteMethods( tableName, tableElement, columnList, fkNodeList, methodSigList );
+        
     }
 
-    private XmlAttribute AppendAttribute( XmlElement element, string name, int value )
+    /// <summary>This method writes a Delete method.
+    /// </summary>
+    /// <param name="tableName"></param>
+    /// <param name="schemaName"></param>
+    /// <param name="ixfkName"></param>
+    /// <param name="isPrimaryKey"></param>
+    /// <param name="columnsUsedInIxFk"></param>
+    private void Out_SurfaceDeleteMethod( 
+        string tableName, 
+        string schemaName, 
+        string ixfkName, 
+        bool isPrimaryKey, 
+        IEnumerable<XmlNode> columnsUsedInIxFk )
     {
-        return AppendAttribute( element, name, value.ToString() );
+        var formattedTableName = 
+            UseSchemaForNamespace ?
+                schemaName + "." + tableName :
+                tableName;
+
+        Out_Comment( 
+            string.Format( @"This method uses the {1} index/fk{0}for deleting a record.  Filtering is dune by field(s) {2}.{3}", 
+                Environment.NewLine, 
+                ixfkName, 
+                string.Join( " and ", columnsUsedInIxFk.Select( n=>n.Attributes["Name"].Value ) ), 
+                isPrimaryKey ?
+                    Environment.NewLine + "The parameter(s) is the primary key." :
+                    ""
+            ), 
+            columnsUsedInIxFk.Select( c => c.Attributes["Name"].Value ), 
+            null
+        );
+
+        // TODO: Move method signature creator to a method of its own.
+        Out( "public void Delete{0}( {1} )", 
+            isPrimaryKey ?
+                "" :
+                 "By" + string.Join( "And", columnsUsedInIxFk.Select( c => c.Attributes["Name"].Value ) ), 
+            CreateMethodParameterListString( columnsUsedInIxFk )
+            );
+        Out("{");
+        PushIndent("\t");
+            Out_Text( @"
+                var ctx = MakeConnectionAndTransaction();
+                ctx.Conn.Open();
+                ctx.Conn.Execute( 
+                    {0}, 
+                    {1} );", 
+                string.Format( 
+                    "\"delete from {0} where {1}\"", 
+                    formattedTableName, 
+                    CreateQuerySelectEqualParameterListString( columnsUsedInIxFk )
+                ), 
+                string.Format( 
+                    "new {{ {0} }}", 
+                    CreateObjectAssignmentParameterListString( columnsUsedInIxFk ) )
+            );
+        PopIndent();
+        Out("}");
     }
 
-    private XmlElement AppendChildElement( XmlElement parentElement, string elementName )
+    /// <summary>This method writes all delete methods for a table's indexes or foreign keys.
+    /// </summary>
+    /// <param name="tableName">The name of the table.  Could be taken from the tableElement too.</param>
+    /// <param name="tableElement"></param>
+    /// <param name="columnList">The columns we use for this table.  Can we use the columns from tableElement or has the list been manipulated?</param>
+    /// <param name="ixfkNodeList">The list of the indexes or foreign keys we create the methods for.</param>
+    /// <param name="methodSigList">A list of method signatures so we don't create to identical methods.  
+    /// This can happen when an index and a foreign key references the same columns or there are reduntant indexes for a table.</param>
+    private void Out_SurfaceDeleteMethods( 
+        string tableName, 
+        XmlElement tableElement, 
+        IEnumerable<XmlElement> columnList, 
+        IEnumerable<XmlElement> ixfkNodeList, 
+        HashSet<string> methodSigList )
     {
-        var newElement = parentElement.OwnerDocument.CreateElement( elementName );
-        parentElement.AppendChild( newElement );
-        return newElement;
+        //  Loop the indexes/fks and create one Find-method per index or fk.
+        foreach( XmlElement indexElement in ixfkNodeList )
+        {
+            //  Filter out the columns that are used for this index.
+            //  Note that the table's columns come from tableElement->Columns/Column
+            //  while the index's columns come from indexElement->Columns/Column.
+            var usedColumns = ColumnsFromIndexOrForeignKey( indexElement, columnList );
+
+            var paramString = CreateMethodSig( usedColumns );
+            if( methodSigList.Contains( paramString ) )
+            {
+                Out( "// There is already a method with parameter(s) {0}.  Do you have redundant indexes or foreign keys?", paramString );
+                Out( "" );
+            }
+            else
+            {
+                methodSigList.Add( paramString );    // Add the new unique string of method parameters.
+
+                var isPrimaryKey = usedColumns.
+                    All( c => bool.Parse( c.Attributes["IsPrimaryKey"].Value ) );
+             
+                Out_SurfaceDeleteMethod( 
+                    tableName, 
+                    tableElement.Attributes[ "Schema" ].Value, 
+                    indexElement.Attributes["Name"].Value, 
+                    isPrimaryKey, 
+                    usedColumns );
+                Out( "" );
+            }
+        }
     }
 
-    //  Copied from http://forums.asp.net/t/1145533.aspx/1
-private string FormatXml(XmlNode xmlNode) 
-{         
-    StringBuilder bob = new StringBuilder(); 
- 
-    // We will use stringWriter to push the formated xml into our StringBuilder bob. 
-    using (StringWriter stringWriter = new StringWriter(bob)) 
-    { 
-        // We will use the Formatting of our xmlTextWriter to provide our indentation. 
-        using (XmlTextWriter xmlTextWriter = new XmlTextWriter(stringWriter)) 
-        { 
-            xmlTextWriter.Formatting = Formatting.Indented; 
-            xmlNode.WriteTo(xmlTextWriter); 
-        } 
-    } 
- 
-    return bob.ToString(); 
-} 
+    /// <summary>This method writes a retrieve method for a table and index/foreign key.
+    /// It is typically called once for every index and foreign key on every table.
+    /// </summary>
+    /// <param name="tableName"></param>
+    /// <param name="schemaName"></param>
+    /// <param name="indexName"></param>
+    /// <param name="columnsUsedInIxFk"></param>
+    /// <param name="isPrimaryKey"></param>
+    private void Out_SurfaceRetrieveMethod( 
+        string tableName, 
+        string schemaName, 
+        string indexName, 
+        IEnumerable<XmlNode> columnsUsedInIxFk, 
+        bool isPrimaryKey )
+    {
+        Out_Comment( 
+            string.Format( @"This method uses the {1} index{0}for searching of field(s) {2}.{3}", 
+                Environment.NewLine, 
+                indexName, 
+                string.Join( " and ", columnsUsedInIxFk.Select( n=>n.Attributes["Name"].Value ) ), 
+                isPrimaryKey ?
+                    Environment.NewLine + "The index is the primary key." :
+                    "" 
+            ), 
+            columnsUsedInIxFk.Select( c => c.Attributes["Name"].Value ), 
+            ""
+        );
+
+        // TODO: Move method signature creator to a method of its own.        
+        var s = "public ";
+        if( false == isPrimaryKey ){
+            s += "IEnumerable<";
+        }
+        s += 
+            DTONameSpaceName + "." + 
+            ( UseSchemaForNamespace ? schemaName + "." : "" ) +
+            tableName;
+        if( false == isPrimaryKey ){
+            s += ">";
+        }
+        s += " Retrieve";
+        s += ( isPrimaryKey ?
+            "" :
+            "By" +
+            string.Join( "And", columnsUsedInIxFk.Select( c => c.Attributes["Name"].Value ) )
+        );
+        s += "( " +
+            CreateMethodParameterListString( columnsUsedInIxFk ) +
+            " )";
+        
+        Out( s );
+        Out_Text( @"
+            {{
+                var ctx = MakeConnectionAndTransaction();
+                var res = ctx.Conn.Query<{0}.{1}{2}>( 
+                    {3},
+                    {4},
+                    transaction: ctx.Trans );
+                    return res{5};
+            }}", 
+                DTONameSpaceName, 
+                UseSchemaForNamespace ?
+                    schemaName + "." :
+                    "", 
+                tableName, 
+                "\"select * from " + 
+                    ( UseSchemaForNamespace ?
+                        schemaName + "." :
+                        "" ) + 
+                    tableName + 
+                    " where " + CreateQuerySelectEqualParameterListString( columnsUsedInIxFk ) + "\"", 
+                "new { " + CreateObjectAssignmentParameterListString( columnsUsedInIxFk ) + " }", 
+                ( isPrimaryKey ? ".Single()" : "" )
+            );
+    }
+
+    /// <summary>This method writes all retrieve methods for a table.
+    /// </summary>
+    /// <param name="tableName"></param>
+    /// <param name="tableElement"></param>
+    /// <param name="columnList"></param>
+    private void Out_SurfaceRetrieveMethods( 
+        string tableName, 
+        XmlElement tableElement, 
+        IEnumerable<XmlElement> columnList )
+    {
+        //  We have a problem where an index and a fk points at the same columns.
+        //  In those cases we get two identical methods; which we can't have.
+        //  Each method declares a unique signature due to its parameters.
+        //  The solution is such:
+        //  We store the unique parameters for each method created.  The
+        //  parameters are created from the columns used so if we store the 
+        //  columns we also have a unique identificator of each method.
+        //  Then we make sure the same signature is not used twice.
+        var methodSigList = new HashSet<string>();
+
+        //  Start by creating a FindAll method.
+        Out_Comment( "This method returns all records in the table " + tableName + "." );
+        Out_Text( @"
+            public List<{0}.{1}{2}> FindAll()
+            {{
+                using( var conn = CreateConnection() )
+                {{
+                    conn.Open();
+                    var res = conn.Query<{0}.{1}{2}>( {3} );
+                    return res.ToList();
+                }}
+            }}", 
+            DTONameSpaceName, 
+            UseSchemaForNamespace ?
+                tableElement.Attributes[ "Schema" ].Value + "." :
+                "", 
+            tableName, 
+            "\"select * from " + 
+            ( UseSchemaForNamespace ?
+                tableElement.Attributes[ "Schema" ].Value + "." :
+                "" ) + 
+            tableName + "\""
+        );
+        Out( "" );
+
+        //  Find all the indexes for the table.
+        var ixNodeList = ToList( tableElement.SelectNodes( "Indexes/Index" ) ).Cast<XmlElement>();
+        Out_SurfaceRetrieveMethods( tableName, tableElement, columnList, ixNodeList, methodSigList );
+
+        // Find every FK for the Table.  We want 1 method per FK since every FK can be searched on.
+        var fkNodeList = ToList( tableElement.SelectNodes( "ForeignKeys/ForeignKey" ) ).Cast<XmlElement>();
+        Out_SurfaceRetrieveMethods( tableName, tableElement, columnList, fkNodeList, methodSigList );
+    }
+
+    /// <summary>This method writes all retrieve methods for all indexes or foreign keys on a table.
+    /// It is typically called twice for every table, once for the indexes and once for all foreign keys. 
+    /// </summary>
+    /// <param name="tableName"></param>
+    /// <param name="tableElement"></param>
+    /// <param name="columnList"></param>
+    /// <param name="ixfkNodeList"></param>
+    /// <param name="methodSigList"></param>
+    private void Out_SurfaceRetrieveMethods( 
+        string tableName, 
+        XmlElement tableElement, 
+        IEnumerable<XmlElement> columnList, 
+        IEnumerable<XmlElement> ixfkNodeList, 
+        HashSet<string> methodSigList )
+    {
+        //  Loop the indexes/fks and create one Find-method per index or fk.
+        foreach( XmlElement indexElement in ixfkNodeList )
+        {
+            //  Filter out the columns that are used for this index.
+            //  Note that the table's columns come from tableElement->Columns/Column
+            //  while the index's columns come from indexElement->Columns/Column.
+            var usedColumns = ColumnsFromIndexOrForeignKey( indexElement, columnList );
+
+            var paramString = CreateMethodSig( usedColumns );
+            if( methodSigList.Contains( paramString ) )
+            {
+                Out( "// There is already a method with parameter(s) {0}.  Do you have redundant indexes or foreign keys?", paramString );
+                Out( "" );
+            }
+            else
+            {
+                methodSigList.Add( paramString );    // Add the new unique string of method parameters.
+
+                XmlAttribute indexTypeAttribute = indexElement.Attributes["IndexType"];
+                bool isPrimaryKey = 
+                    usedColumns.All( c => bool.Parse( c.Attributes["IsPrimaryKey"].Value ) );
+                string indexName = indexElement.Attributes["Name"].Value;
+
+                Out_SurfaceRetrieveMethod( 
+                    tableName, 
+                    UseSchemaForNamespace ?
+                        tableElement.Attributes[ "Schema" ].Value :
+                        null, 
+                    indexName, 
+                    usedColumns, 
+                    isPrimaryKey );
+                Out( "" );
+            }
+        }
+    }
+
+    /// <summary>This method writes an update method according to 1 index/foreign key for a table.
+    /// </summary>
+    /// <param name="tableName"></param>
+    /// <param name="tableElement"></param>
+    /// <param name="columnList"></param>
+    private void Out_SurfaceUpdateMethod(
+        string tableName, 
+        XmlElement tableElement, 
+        IEnumerable<XmlElement> columnList )
+    {
+        // TODO: Make it possible to set setting for reading the record after writing it. Issue #4.
+        
+        Out_Comment(
+            "This method updates every field in the " + tableName + " table.", 
+            columnList.Select( c => c.Attributes["Name"].Value )
+        );
+
+        // TODO: Move method signature creator to a method of its own.
+        Out( "public void Update( {0} )", 
+            CreateMethodParameterListString( columnList )
+        );
+        Out( "{" );
+        PushIndent( "\t" );
+            Out_Text( @"
+                var ctx = MakeConnectionAndTransaction();
+                ctx.Conn.Execute(
+                    {0},
+                    {1}, 
+                    ctx.Trans);", 
+                string.Format( 
+                    "\"update {1}{2} set {3} where {4}\"", 
+                    Environment.NewLine, 
+                    UseSchemaForNamespace ?
+                        tableElement.Attributes[ "Schema" ].Value + "." :
+                        "", 
+                    tableName, 
+                    CreateQueryUpdateAssignment( 
+                        columnList.Where( c => false  == bool.Parse( c.Attributes["IsPrimaryKey"].Value ) ) ), 
+                    CreateQuerySelectEqualParameterListString( 
+                        columnList.Where( c => true  == bool.Parse( c.Attributes["IsPrimaryKey"].Value ) ) )
+                    ), 
+                string.Format( 
+                    "new {{ {0} }}", 
+                    CreateObjectAssignmentParameterListString( columnList ) )
+             );
+        PopIndent();
+        Out( "}" );
+        Out( "" );
+    }
+
+    /// <summary>This method takes the buffer and saves it as a file.
+    /// </summary>
+    /// <param name="outputFileName"></param>
+    /// <returns></returns>
+    string SaveOutput(string outputFileName)
+    {
+        // By some reason unknown to me the file the string contains a leading whitespace.  Hence the Trim.
+        // This happened to me while writing an XML file which doesn't tolerate a leading whitespace. /OF
+      var content = this.GenerationEnvironment.ToString().Trim();
+
+      string templateDirectory = Path.GetDirectoryName(Host.TemplateFile);
+      string outputFilePath = Path.Combine(templateDirectory, outputFileName);
+
+        File.WriteAllText(outputFilePath, content);
+
+      this.GenerationEnvironment.Remove(0, this.GenerationEnvironment.Length);
+
+        return outputFilePath;
+    }
+
+    /// <summary>This method converts an XmlNodeList to a list.
+    /// "Normally we would have done an extension method but T4 mechanics puts hinders in the way.
+    /// </summary>
+    /// <param name="nodeList"></param>
+    /// <returns></returns>
+    private static List<XmlNode> ToList( XmlNodeList nodeList )
+    {
+        // I would have preferred to use AsQueryable as MSDN says.  But I can't get it to work. /OF
+        //  http://msdn.microsoft.com/en-us/library/system.xml.xmlnodelist.aspx
+        // E.g.: var x = fkElement.SelectNodes( "Columns/Column" ).AsQueryable();
+
+        var ret = new List<XmlNode>();
+        foreach( XmlNode node in nodeList )
+        {
+            ret.Add( node );
+        }
+        return ret;
+    }
 
 #>
