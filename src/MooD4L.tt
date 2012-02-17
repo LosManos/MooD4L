@@ -988,7 +988,7 @@
                     {1},
                     ctx.Trans
                 );
-                var res = ctx.Conn.Query<float>(
+                var res = ctx.Conn.Query<int>(
                     {2},
                     ctx.Trans
                 );
@@ -1004,7 +1004,7 @@
                 " ( " + CreateQueryInsertParameterListString( columnList ) + " )" +
                 " values( " + CreateQueryInsertParameterListStringWithAtSign( columnList ) + " )\"",
             "new { " + CreateObjectAssignmentParameterListString( columnList ) + "}", 
-            "\"select @@identity\""
+            "\"select cast( @@identity as int)\""
         );
         Out( "" );
     }
