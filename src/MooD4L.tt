@@ -295,10 +295,10 @@
         var isNullable = bool.Parse( node.Attributes["IsNullable"].Value );
         var parameterName = node.Attributes["Name"].Value;
         var parameterType = node.Attributes["DotnetType"].Value;
-        var type = TypeMappings.ContainsKey( parameterType ) ? 
-            TypeMappings[parameterType] : "string";
-        var typeFormat       = type != "string" && isNullable ? "Nullable<{0}>" : "{0}";
-        return String.Format("{0} {1}", String.Format(typeFormat,type), parameterName);
+        /* var type = TypeMappings.ContainsKey( parameterType ) ? 
+            TypeMappings[parameterType] : "string"; */
+        var typeFormat       = parameterType != "string" && isNullable ? "Nullable<{0}>" : "{0}";
+        return String.Format("{0} {1}", String.Format(typeFormat, parameterType), parameterName);
     }
 
     /// <summary> This method creates a parameter for a method from a column.
