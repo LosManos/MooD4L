@@ -161,12 +161,27 @@
             select c;
         return usedColumns;
     }
+	
+	/// <summary>This method returns a DTO class declaration.
+	/// Us it for creating ... DTO class declarations!
+	/// I.e.: DTO.Customer Customer
+	/// or DTO.db.Customer customer.
+	/// </summary>
+	/// <param name="table"></param>
+	/// <returns></returns>
+	private static string CreateDTOClassDeclarationType( XmlNode table )
+	{
+		var tableName = table.Attributes["Name"].Value;
+		return
+			DTONameSpaceName +
+			( UseSchemaForNamespace ? "." + table.Attributes["Schema"].Value : "" ) +
+			"." + tableName;
+	}
 
     /// <summary> This method creates the signature for the class.
     /// E.g.: public partial class Customer()
     /// </summary>
     /// <param name="table"></param>
-    /// <param name="usePartialClass"></param>
     /// <returns></returns>
    private static string CreateDTOClassSignature( Table table )
    {
@@ -252,6 +267,36 @@
         }
     }
 
+    /// <summary>This method takes a column and returns a string to be used
+    /// as the method parameter.
+    /// E.g.: "int CustomerID" or "int? UserID" or "string Name".
+    /// </summary>
+    /// <param name="node"></param>
+    /// <returns></returns>
+    private static string CreateMethodParameter( XmlNode node )
+    {
+        var isNullable = bool.Parse( node.Attributes["IsNullable"].Value );
+        var parameterName = node.Attributes["Name"].Value;
+        var parameterType = node.Attributes["DotnetType"].Value;
+        /* var type = TypeMappings.ContainsKey( parameterType ) ? 
+            TypeMappings[parameterType] : "string"; */
+        var typeFormat       = parameterType != "string" && isNullable ? "Nullable<{0}>" : "{0}";
+		return CreateMethodParameter( String.Format(typeFormat, parameterType), parameterName );
+        //return String.Format("{0} {1}", String.Format(typeFormat, parameterType), parameterName);
+    }
+	
+	/// <summary>This method returns typically something like "int CustomerID".
+	/// Feel free to overload with smart parameters so one can, in an easy-to-read way
+	/// create nullable parameters and parameters with default values.
+	/// </summary>
+	/// <param name="typeName"></param>
+	/// <param name="variableName"></param>
+	/// <returns></returns>
+	private static string CreateMethodParameter( string typeName, string variableName )
+	{
+		return typeName + " " + variableName;
+	}
+
     /// <summary>This method returns e.g. "CustomerID = CustomerID" for a column.
     /// </summary>
     /// <param name="node"></param>
@@ -282,23 +327,6 @@
     private static string CreateObjectAssignmentParameterListString( IEnumerable<XmlNode> nodeList )
     {
         return string.Join( ", ", CreateObjectAssignmentParameterList( nodeList ) );
-    }
-
-    /// <summary>This method takes a column and returns a string to be used
-    /// as the method parameter.
-    /// E.g.: "int CustomerID" or "int? UserID" or "string Name".
-    /// </summary>
-    /// <param name="node"></param>
-    /// <returns></returns>
-    private static string CreateMethodParameter( XmlNode node )
-    {
-        var isNullable = bool.Parse( node.Attributes["IsNullable"].Value );
-        var parameterName = node.Attributes["Name"].Value;
-        var parameterType = node.Attributes["DotnetType"].Value;
-        /* var type = TypeMappings.ContainsKey( parameterType ) ? 
-            TypeMappings[parameterType] : "string"; */
-        var typeFormat       = parameterType != "string" && isNullable ? "Nullable<{0}>" : "{0}";
-        return String.Format("{0} {1}", String.Format(typeFormat, parameterType), parameterName);
     }
 
     /// <summary> This method creates a parameter for a method from a column.
@@ -393,17 +421,61 @@
         }
         return string.Join( "," + Environment.NewLine, assignmentList.ToArray() );
     }
-    
+
+	/// <summary>This method returns e.g. ["CustomerID", "Name"] for a list of columns.
+	/// </summary>
+	/// <param name="columnList"></param>
+	/// <returns></returns>
+	private static IEnumerable<string> CreateQueryInsertParameterList( IEnumerable<XmlElement> columnList )
+	{
+		//	return columnList.Select( c => c.Attributes["Name"].Value );
+		return CreateQueryInsertParameterList( null, columnList, null );
+	}
+
+	/// <summary>This method returns e.g. ["CustomerTable.CustomerID", "CustomerTable.Name"] for a list of columns.
+	/// </summary>
+	/// <param name="prefix">Whatever goes in front of the column name.  Set to null if not used.</param>
+	/// <param name="columnList"></param>
+	/// <param name="suffix>Whatever goes in front of the column name.  Set to null if not used.</param>
+	/// <returns></returns>
+	private static IEnumerable<string> CreateQueryInsertParameterList( 
+		string prefix, 
+		IEnumerable<XmlElement> columnList, 
+		string suffix )
+	{
+		return columnList.Select( c => 
+			( string.IsNullOrWhiteSpace(prefix) ? "" : prefix ) + 
+			c.Attributes["Name"].Value +
+			( string.IsNullOrWhiteSpace(suffix ) ? "" : suffix )
+		);
+	}
+
     /// <summary>This method returns e.g. "CustomerID, Name" for a list of columns.
     /// </summary>
     /// <param name="columnList"></param>
     /// <returns></returns>
     private static string CreateQueryInsertParameterListString( IEnumerable<XmlElement> columnList )
     {
-        return string.Join( ", ", columnList.Select( c => c.Attributes["Name"].Value ) );
+        return string.Join( ", ", CreateQueryInsertParameterList( columnList ) );
     }
+	
+	/// <summary>This method returns e.g. "Customer.CustomeriD, Customer.Name"
+	/// for a list of columns.
+	/// </summary>
+	/// <param name="prefix"></param>
+	/// <param name="columnList"></param>
+	/// <param name="suffix"></param>
+	/// <returns></returns>
+    private static string CreateQueryInsertParameterListString( 
+		string prefix, 
+		IEnumerable<XmlElement> columnList, 
+		string suffix )
+	{
+        return string.Join( ", ", CreateQueryInsertParameterList( prefix, columnList, suffix ) );
+	}
 
     /// <summary>This method returns e.g. "@CustomerID, @Name" for a list of columns.
+	/// Feel free to replace with CreateQueryInsertParameterList( "@", ...).
     /// </summary>
     /// <param name="columnList"></param>
     /// <returns></returns>
@@ -917,11 +989,21 @@
         Out( FormatXml( doc ) );
     }
 
+	/// <summary>This method prints XML comments for a method.
+    /// </summary>
+    /// <param name="summaryText">The summary text.  Line breaks are formatted accordingly.</param>
+    /// <param name="parameter">A param line will be written with this parameter's name.</param>
+	/// /// <param name="returnText">Optional. If passed along a returns line will be written.  This has, as of yet, not correctly formatted line breaks.  Feel free to implement.</param>
+    private void Out_Comment( string summaryText, string parameter, string returnText = null )
+    {
+		Out_Comment( summaryText, new string[]{parameter}, returnText );
+	}
+	
     /// <summary>This method prints XML comments for a method.
     /// </summary>
     /// <param name="summaryText">The summary text.  Line breaks are formatted accordingly.</param>
-    /// <param name="null">Optional.  If passed along, param lines will be written.</param>
-    /// <param name="null">Optional. If passed along a returns line will be written.  This has, as of yet, not correctly formatted line breaks.  Feel free to implement.</param>
+    /// <param name="parameterList">Optional.  If passed along, param lines will be written.</param>
+    /// <param name="returnText">Optional. If passed along a returns line will be written.  This has, as of yet, not correctly formatted line breaks.  Feel free to implement.</param>
     private void Out_Comment( string summaryText, IEnumerable<string> parameterList = null, string returnText = null )
     {
 
@@ -1009,20 +1091,6 @@
         Out( "" );
     }
     
-    /// <summary>This methods writes all (that is 1) update methods for a table.
-    /// It is just a pass through method.  Feel free to remove; it is a remains.
-    /// </summary>
-    /// <param name="tableName"></param>
-    /// <param name="tableElement"></param>
-    /// <param name="columnList"></param>
-    private void Out_SurfaceUpdateMethods(
-        string tableName, 
-        XmlElement tableElement, 
-        IEnumerable<XmlElement> columnList )
-    {
-        Out_SurfaceUpdateMethod( tableName, tableElement, columnList );
-    }
-
     /// <summary>This method writes all create methods for a table.
     /// </summary>
     /// <param name="tableName"></param>
@@ -1379,54 +1447,97 @@
         }
     }
 
-    /// <summary>This method writes an update method according to 1 index/foreign key for a table.
+    /// <summary>This method writes an update method.
     /// </summary>
     /// <param name="tableName"></param>
     /// <param name="tableElement"></param>
     /// <param name="columnList"></param>
+	/// <param name="byColumns">Set to true if the resulting outputed method should take each column as parameter.
+	/// Set to false to make it take an object as parameter.</param>
     private void Out_SurfaceUpdateMethod(
+        string tableName, 
+        XmlElement tableElement, 
+        IEnumerable<XmlElement> columnList, 
+		bool byColumns)
+    {
+        // TODO: Make it possible to set setting for reading the record after writing it. Issue #4.
+        
+		if( byColumns ){
+			//	Create a method that takes all table columns as parameters.
+	        Out_Comment(
+	            "This method updates every field in the " + tableName + " table.", 
+	            columnList.Select( c => c.Attributes["Name"].Value )
+	        );
+
+	        // TODO: Move method signature creator to a method of its own.
+	        Out( "public void Update( {0} )", 
+	            CreateMethodParameterListString( columnList )
+	        );
+	        Out( "{" );
+	        PushIndent( "\t" );
+	            Out_Text( @"
+	                var ctx = MakeConnectionAndTransaction();
+	                ctx.Conn.Execute(
+	                    {0},
+	                    {1}, 
+	                    ctx.Trans);", 
+	                string.Format( 
+	                    "\"update {1}{2} set {3} where {4}\"", 
+	                    Environment.NewLine, 
+	                    UseSchemaForNamespace ?
+	                        tableElement.Attributes[ "Schema" ].Value + "." :
+	                        "", 
+	                    tableName, 
+	                    CreateQueryUpdateAssignment( 
+	                        columnList.Where( c => false  == bool.Parse( c.Attributes["IsPrimaryKey"].Value ) ) ), 
+	                    CreateQuerySelectEqualParameterListString( 
+	                        columnList.Where( c => true  == bool.Parse( c.Attributes["IsPrimaryKey"].Value ) ) )
+	                    ), 
+	                string.Format( 
+	                    "new {{ {0} }}", 
+	                    CreateObjectAssignmentParameterListString( columnList ) )
+	             );
+	        PopIndent();
+	        Out( "}" );
+		}else{
+			//	Create a method that takes an object as parameter.
+	        Out_Comment(
+	            "This method updates every field in the " + tableName + " table.", 
+	            tableName
+	        );
+	        // TODO: Move method signature creator to a method of its own.
+	        Out( "public void Update( {0} )", 
+	            CreateMethodParameter( 
+					CreateDTOClassDeclarationType( tableElement ), 
+					tableName )
+	        );
+	        Out( "{" );
+	        PushIndent( "\t" );
+				Out( "Update( " );
+		        PushIndent( "\t" );
+					Out( CreateQueryInsertParameterListString( tableName + ".", columnList, null ) );
+		        PopIndent();
+				Out( ");" );
+	        PopIndent();
+	        Out( "}" );
+		}
+        Out( "" );
+    }
+
+	    /// <summary>This methods writes all update methods for a table.
+    /// It is just a pass through method.  Feel free to remove; it is a remains.
+    /// </summary>
+    /// <param name="tableName"></param>
+    /// <param name="tableElement"></param>
+    /// <param name="columnList"></param>
+    private void Out_SurfaceUpdateMethods(
         string tableName, 
         XmlElement tableElement, 
         IEnumerable<XmlElement> columnList )
     {
-        // TODO: Make it possible to set setting for reading the record after writing it. Issue #4.
-        
-        Out_Comment(
-            "This method updates every field in the " + tableName + " table.", 
-            columnList.Select( c => c.Attributes["Name"].Value )
-        );
+        Out_SurfaceUpdateMethod( tableName, tableElement, columnList, byColumns : false );
 
-        // TODO: Move method signature creator to a method of its own.
-        Out( "public void Update( {0} )", 
-            CreateMethodParameterListString( columnList )
-        );
-        Out( "{" );
-        PushIndent( "\t" );
-            Out_Text( @"
-                var ctx = MakeConnectionAndTransaction();
-                ctx.Conn.Execute(
-                    {0},
-                    {1}, 
-                    ctx.Trans);", 
-                string.Format( 
-                    "\"update {1}{2} set {3} where {4}\"", 
-                    Environment.NewLine, 
-                    UseSchemaForNamespace ?
-                        tableElement.Attributes[ "Schema" ].Value + "." :
-                        "", 
-                    tableName, 
-                    CreateQueryUpdateAssignment( 
-                        columnList.Where( c => false  == bool.Parse( c.Attributes["IsPrimaryKey"].Value ) ) ), 
-                    CreateQuerySelectEqualParameterListString( 
-                        columnList.Where( c => true  == bool.Parse( c.Attributes["IsPrimaryKey"].Value ) ) )
-                    ), 
-                string.Format( 
-                    "new {{ {0} }}", 
-                    CreateObjectAssignmentParameterListString( columnList ) )
-             );
-        PopIndent();
-        Out( "}" );
-        Out( "" );
+		Out_SurfaceUpdateMethod( tableName, tableElement, columnList, byColumns : true );
     }
 
     /// <summary>This method takes the buffer and saves it as a file.
