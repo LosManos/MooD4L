@@ -1272,21 +1272,22 @@
     /// <param name="tableName"></param>
     /// <param name="schemaName"></param>
     /// <param name="indexName"></param>
-    /// <param name="columnsUsedInIxFk"></param>
     /// <param name="isPrimaryKey"></param>
+    /// <param name="columnsUsedInIxFk"></param>
     private void Out_SurfaceRetrieveMethod( 
         string tableName, 
         string schemaName, 
         string indexName, 
-        IEnumerable<XmlNode> columnsUsedInIxFk, 
-        bool isPrimaryKey )
+		bool indexIsPrimaryKey, 
+        IEnumerable<XmlNode> columnsUsedInIxFk
+    )
     {
         Out_Comment( 
             string.Format( @"This method uses the {1} index{0}for searching of field(s) {2}.{3}", 
                 Environment.NewLine, 
                 indexName, 
                 string.Join( " and ", columnsUsedInIxFk.Select( n=>n.Attributes["Name"].Value ) ), 
-                isPrimaryKey ?
+                indexIsPrimaryKey ?
                     Environment.NewLine + "The index is the primary key." :
                     "" 
             ), 
@@ -1296,18 +1297,18 @@
 
         // TODO: Move method signature creator to a method of its own.        
         var s = "public ";
-        if( false == isPrimaryKey ){
+        if( false == indexIsPrimaryKey ){
             s += "IEnumerable<";
         }
         s += 
             DTONameSpaceName + "." + 
             ( UseSchemaForNamespace ? schemaName + "." : "" ) +
             tableName;
-        if( false == isPrimaryKey ){
+        if( false == indexIsPrimaryKey ){
             s += ">";
         }
         s += " Retrieve";
-        s += ( isPrimaryKey ?
+        s += ( indexIsPrimaryKey ?
             "" :
             "By" +
             string.Join( "And", columnsUsedInIxFk.Select( c => c.Attributes["Name"].Value ) )
@@ -1324,7 +1325,7 @@
                     {3},
                     {4},
                     transaction: ctx.Trans );
-                    return res{5};
+                return res{5};
             }}", 
                 DTONameSpaceName, 
                 UseSchemaForNamespace ?
@@ -1338,7 +1339,7 @@
                     tableName + 
                     " where " + CreateQuerySelectEqualParameterListString( columnsUsedInIxFk ) + "\"", 
                 "new { " + CreateObjectAssignmentParameterListString( columnsUsedInIxFk ) + " }", 
-                ( isPrimaryKey ? ".Single()" : "" )
+                ( indexIsPrimaryKey ? ".Single()" : "" )
             );
     }
 
@@ -1440,8 +1441,8 @@
                         tableElement.Attributes[ "Schema" ].Value :
                         null, 
                     indexName, 
-                    usedColumns, 
-                    isPrimaryKey );
+                    isPrimaryKey, 
+                    usedColumns );
                 Out( "" );
             }
         }
