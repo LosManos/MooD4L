@@ -6,6 +6,7 @@
 <#@ import namespace="System.Data" #>
 <#@ import namespace="System.Data.SqlClient" #>
 <#@ import namespace="System.Data.Common" #>
+<#@ import namespace="System.Collections.Generic" #>
 <#@ import namespace="System.Configuration" #>
 <#+
 
@@ -24,9 +25,33 @@
 	
     // CONFIGURE CODE GENERATION HERE
 
-	    // Regex filter for the tables that are excluded from code generation.
+    // Regex filter for the tables that are excluded from code generation.
     // E.g.: "Applications|aspnet_" excludes the tables one gets with aspnet authentication.
+    // "aspnet.*" exludes tables starting with "aspnet".
+    // ".+Umbraco" excludes all tables ending with "Umbraco".
     const string ExcludeTablesRegex = "Applications|aspnet_";
+
+    // Regex filter for finding enum tables.
+    // E.g.: "StatusType|ProjectType|.+Type".
+    const string EnumTables = "VerifyPartyStatus|.+Type";
+
+    // Filter for what the columns mean in an EnumTable.
+    // The first item is a regex for the table name.  ".+Type" is a match for every
+    // table ending with "Type".
+    // E.g.:
+    //    { "ProjectStatus", new Tuple<string, string>( "ProjectStatusID", "Name" ) }, 
+    //    { @"\w+Type|+.IssueStatus", new Tuple<string, string, string>( "ID", "Name" ) }
+    // Comments below is an alternative implementation; which is not implemented.
+    // readonly Dictionary<string, string[]> EnumTableColumns = new Dictionary<string, string[]>{
+    //	{ "a", new string[]{ "c", "d" } }, 
+    //	{ "b", new string[]{ "c", "d" } }
+    //};
+	
+    readonly Dictionary<string, Tuple<string, string>> EnumTableColumns = 
+        new Dictionary<string, Tuple<string, string>>{
+	        { "VerifyPartyStatus", new Tuple<string, string>( "ID", "Name" ) }, 
+	        { @"\w+Type", new Tuple<string, string>( "ID", "Name" ) }
+    };
 
     // Set to true for having the schema in the namespace affect the namespace.
     // The namespace will for instance be "MyDatalayer.dbo".
