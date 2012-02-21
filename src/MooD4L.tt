@@ -58,7 +58,7 @@
 
 			//	Generate the Enums.
 			var xmlDataDoc = ReadXmlFile( xmlDataPathFile );
-			OutputEnumClasses( xmlDataDoc );
+			OutputEnumClasses( xmlSchemaDoc, xmlDataDoc );
 			
 			//	Generate the DTO classes.
 			OutputDTOClasses( xmlSchemaDoc, xmlDataDoc );
@@ -1153,13 +1153,17 @@
 	
 	/// <summary>This method writes all Enum files.
 	/// </summary>
+	/// <param name="xmlSchemaDoc"></param>
 	/// <param name="xmlDataDoc"></param>
-	private void OutputEnumClasses( XmlDocument xmlDataDoc )
+	private void OutputEnumClasses( XmlDocument xmlSchemaDoc, XmlDocument xmlDataDoc )
 	{
+		XmlElement schemaRoot = xmlSchemaDoc.DocumentElement;
 		XmlElement dataRoot = xmlDataDoc.DocumentElement;
 		foreach( XmlElement enumTableElement in dataRoot.SelectNodes( "/Database/EnumTables/EnumTable" ) )
 		{
-			var fileName = OutputEnumClassFile( enumTableElement ) + ".MooD4L.cs";
+			var tableName = enumTableElement.Attributes["Name"].Value;
+			XmlNodeList foreignKeys = schemaRoot.SelectNodes( "//Table/ForeignKeys/ForeignKey[@ReferencedTable='" + tableName+ "']" );
+			var fileName = OutputEnumClassFile( enumTableElement, foreignKeys ) + ".MooD4L.cs";
             var enumPathFile = SaveOutput( 
 				Path.Combine( Path.GetDirectoryName(Host.TemplateFile), 
 					Path.Combine( DTOOutputPath, fileName ) ) );
@@ -1170,9 +1174,11 @@
 	/// <summary>This method writes one Enum file.
 	/// </summary>
 	/// <param name="enumTableElement"></param>
+	/// <param name="foreignKeys"></param>
 	/// <returns>The enum name.</returns>
-	private string OutputEnumClassFile( XmlElement enumTableElement )
+	private string OutputEnumClassFile( XmlElement enumTableElement, XmlNodeList foreignKeys )
 	{
+		string tableName = enumTableElement.Attributes["Name"].Value;
 		Out_Header();
         Out("");
         Out("using System;");
@@ -1181,16 +1187,21 @@
         Out( CreateNamespaceSignature( DTONameSpaceName, enumTableElement, UseSchemaForNamespace ) );
         Out( "{" );
 	    PushIndent("\t");
-		
 			var rowElements = enumTableElement.SelectNodes( "Rows/Row");
 			if( rowElements.Count == 0 )
 			{
-				Out_Comment( "There are no rows in table " + enumTableElement.Attributes["Name"].Value + "." );
+				Out_Comment( "There are no rows in table " + tableName + "." );
 				Out_Comment( "Is it correct?" );
 			}
 			else
 			{
-				Out( "public enum " + enumTableElement.Attributes["Name"].Value + "Enum" );
+				var fkList = ToList( foreignKeys );
+				Out_XmlComment( 
+					"This enum contains the rows of table " + tableName + "." + Environment.NewLine +
+					"It is used through foreign key(s) " + string.Join( ", ", fkList.Select( fk => fk.Attributes["Name"].Value ) ) + "." + Environment.NewLine +
+					"by table(s) " + string.Join( ", ", fkList.Select( fk => fk.ParentNode.ParentNode.Attributes["Name"].Value ) ) + "."
+				);
+				Out( "public enum " + tableName + "Enum" );
 				Out( "{" );
 		    	PushIndent("\t");
 					var enumStringList = new List<string>();
@@ -1206,7 +1217,7 @@
 			}
 		PopIndent();
 		Out( "}" );
-		return enumTableElement.Attributes["Name"].Value + "Enum";
+		return tableName + "Enum";
 		//asdf
 	}
 	
