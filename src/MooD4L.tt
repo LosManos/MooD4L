@@ -47,19 +47,24 @@
 			//	Generate the Surface files.
 
 			conn.Open();
-			var xmlDataDoc = ReadXmlFile( xmlSchemaPathFile );
-            OutputSurface( SurfaceNameSpaceName, xmlDataDoc );
+			var xmlSchemaDoc = ReadXmlFile( xmlSchemaPathFile );
+            OutputSurface( SurfaceNameSpaceName, xmlSchemaDoc );
       
 			//	Generate the DTO classes.
-			//	This loop will in the future be moved to a method of its own, 
-			//	like that of OutputSurface.
-			
-            //    Create DTO class output directory if needed.
+
+			//    Create DTO class output directory if needed.
             var dtoClassOutputDirectory = Path.Combine( Path.GetDirectoryName(Host.TemplateFile), DTOOutputPath );
             if( false == Directory.Exists( dtoClassOutputDirectory ) ){
                 Directory.CreateDirectory( dtoClassOutputDirectory );
             }
 
+			var xmlDataDoc = ReadXmlFile( xmlDataPathFile );
+			OutputDTOClasses( xmlSchemaDoc, xmlDataDoc );
+			
+
+			//	This loop will in the future be moved to a method of its own, 
+			//	like that of OutputSurface.
+			/*
             foreach (Table table in tables)
             {
                 if ( IsClassOkToGenerate( table ) )
@@ -72,14 +77,15 @@
                     project.ProjectItems.AddFromFile(path);
                 }
             }
-            
+            */
+			
 		//	Out(...) here results in update of MooD4L.cs.
 		//	Use it for for instance outputting comments of what is happening, 
 		//	a log if you prefer.
-		Out( "//	MooD4L was latest run at " + DateTime.Now.ToString("u") ); 
+		Out( "//	MooD4L was latest run at " + DateTime.Now.ToString("u") );
 
 		}
-			
+
     }
 	
 #>
@@ -183,6 +189,42 @@
             select c;
         return usedColumns;
     }
+
+	/// <summary>This method creates the C# code that is a property annotation.
+	/// </summary>
+	/// <param name="columnElement"></param>
+	/// <returns></returns>
+	private static string CreateAnnotation( XmlElement columnElement )
+	{
+		int maximumLength = int.Parse( columnElement.Attributes["MaximumLength"].Value );
+		bool isNullable = bool.Parse( columnElement.Attributes["IsNullable"].Value );
+		bool isPrimaryKey = bool.Parse( columnElement.Attributes["IsPrimaryKey"].Value );
+    	var canHaveLength = new string[] { "nvarchar", "varchar", "char", "nchar" };
+
+    	var retList = new List<string>();
+    	if ( canHaveLength.Contains( columnElement.Attributes["DbType"].Value ) && 
+			maximumLength > -1 )
+		{
+            retList.Add( String.Format("StringLength({0})", maximumLength));
+		}
+        if ( false == isNullable )
+		{
+            retList.Add("Required");
+		}
+        if ( isPrimaryKey )
+		{
+        	retList.Add("Key");
+		}
+		
+		if( retList.Count >=1 )
+		{
+			return "[" + string.Join( ", ", retList ) + "]";
+    	}
+		else
+		{
+			return string.Empty;
+		}
+	}
 	
 	/// <summary>This method returns a DTO class declaration.
 	/// Us it for creating ... DTO class declarations!
@@ -199,12 +241,48 @@
 			( UseSchemaForNamespace ? "." + table.Attributes["Schema"].Value : "" ) +
 			"." + tableName;
 	}
+	
+	/// <summary>This method returns a property declaration for a DTO class.
+	/// E.g.: "public int CustomerID;"
+	/// </summary>
+	/// <param name="columnElement"></param>
+	/// <returns></returns>
+	private static string CreateDTOClassPropertyString( XmlElement columnElement )
+	{
+		return 
+			CreateAnnotation( columnElement ) + 
+			Environment.NewLine + 
+			"public " + 
+			CreateMethodParameter( columnElement ) + 
+			" { get; set; }";
+	}
+	
+	/// <summary>This method returns a string that is all properties declarations for a DTO class.
+	/// E.g.: 
+	/// 	public int CustomerID;
+	/// 	public string Name;
+	/// </summary>
+	/// <param name="tableElement"></param>
+	/// <returns></returns>
+	private static string CreateDTOClassPropertiesString( XmlElement tableElement )
+	{
+		var retList = new List<string>();
+		
+		foreach( XmlElement columnElement in tableElement.SelectNodes( "Columns/Column" ) )
+		{
+			retList.Add( CreateDTOClassPropertyString( columnElement ) );
+		}
+		
+		return string.Join( Environment.NewLine, retList );
+	}
 
+	/*
     /// <summary> This method creates the signature for the class.
     /// E.g.: public partial class Customer()
     /// </summary>
     /// <param name="table"></param>
     /// <returns></returns>
+	[ Obsolete( "Use XML version instead." ) ]
    private static string CreateDTOClassSignature( Table table )
    {
         var ret = "public";
@@ -219,6 +297,27 @@
         }
         return ret;
    }
+	*/
+	
+    /// <summary> This method creates the signature for the class.
+    /// E.g.: public partial class Customer()
+	/// </summary>
+	/// <param name="tableElement"></param>
+	/// <returns></returns>
+	private static string CreateDTOClassSignature( XmlElement tableElement )
+	{
+        var ret = "public";
+        if( DTOUsePartialClass )
+        {
+            ret += " partial";
+        }
+        ret += " class " + tableElement.Attributes["Name"].Value;
+        if( false == string.IsNullOrWhiteSpace( DTOClassInheritFrom ) )
+        {
+            ret += " : " + DTOClassInheritFrom;
+        }
+        return ret;
+	}
 
     /// <summary>This method returns the text that should go into every file header.
     /// </summary>
@@ -237,17 +336,39 @@
                 commentSuffix );
     }
 
+	/*
     /// <summary>This method returns the C# namespace string to be used in the Surface classes.
     /// </summary>
     /// <param name="namespaceName"></param>
     /// <param name="useSchemaForNamespace"></param>
     /// <returns></returns>
+	[ Obsolete( "Replace with XML version." ) ]
     private static string CreateNamespaceSignature( string namespaceName, Table table, bool useSchemaForNamespace )
     {
         string ret = string.Format( "namespace {0}", namespaceName );
         if( useSchemaForNamespace )
         {
             ret += "." + table.Schema;
+        }
+        return ret;
+    }
+	*/
+	
+	/// <summary>This method returns the C# namespace string to be used in the Surface classes.
+    /// </summary>
+    /// <param name="namespaceName"></param>
+	/// <param name="tableElement"></param>
+    /// <param name="useSchemaForNamespace"></param>
+    /// <returns></returns>
+    private static string CreateNamespaceSignature( 
+		string namespaceName, 
+		XmlElement tableElement, 
+		bool useSchemaForNamespace )
+    {
+        string ret = string.Format( "namespace {0}", namespaceName );
+        if( useSchemaForNamespace )
+        {
+            ret += "." + tableElement.Attributes[".Schema"];
         }
         return ret;
     }
@@ -377,6 +498,7 @@
         return string.Join( ",", usedColumns.Select( c => c.Attributes["Name"].Value ) );
      }
 
+	/*
     /// <summary> This method creates a method signature.
     /// E.g.: "private void Set( CustomerID, Name )".
     /// </summary>
@@ -388,6 +510,7 @@
     /// <param name="includePrimaryKey">Whether the primary key should be included or not.
     /// New objects often can't have the PK set at the client, only in the database.</param>
     /// <returns></returns>
+	[ Obsolete( "Use the XML based method instead." ) ]
     private static string CreateMethodSignature( string scope, bool isStatic, string returnType, string methodName, ColumnCollection columns, bool includePrimaryKey = true )
     {
         string ret = scope;
@@ -419,7 +542,42 @@
         ret += ")";
         return ret;
     }
-
+	*/
+	
+    private static string CreateMethodSignature( 
+		string scope, bool isStatic, string returnType, string methodName, 
+		XmlNodeList columnElements, 
+		bool includePrimaryKey = true )
+	{
+        string ret = scope;
+        if( isStatic )
+        {
+            ret += " static";
+        }
+        if( false == string.IsNullOrWhiteSpace( returnType ) )
+        {
+            ret += " " + returnType;
+        }
+        ret += " " + methodName + "(";
+        var paramList = new List<string>();
+        foreach( XmlElement columnElement in columnElements )
+        {
+            if( bool.Parse( columnElement.Attributes["IsPrimaryKey"].Value ) && 
+				false == includePrimaryKey )
+            {
+                //    The column is part of the primary key and we don't want it according to parameter.
+            }
+            else
+            {
+                paramList.Add( CreateMethodParameter( columnElement ) );
+            }
+        }
+        ret += " " + string.Join( ", ", paramList.ToArray() ) + " ";
+        ret += ")";
+        return ret;
+	}
+	
+	/*
     /// <summary> This method creates all parameters for a constructor.
     /// It is not necessarily only for constructor use.  A method like "Set( CustomerID, Name, ...)"
     /// could use it too.  Rename it when need arises.
@@ -427,6 +585,7 @@
     /// <param name="columns"></param>
     /// <param name="includePrimaryKey"></param>
     /// <returns></returns>
+	[ Obsolete( "Use the XML based version instead." ) ]
     private static string CreateNamedArgumentListForConstructor( ColumnCollection columns, bool includePrimaryKey = true )
     {
         var assignmentList = new List<string>();
@@ -439,6 +598,33 @@
             else
             {
                 assignmentList.Add( column.Name + " = " + column.Name );
+            }    
+        }
+        return string.Join( "," + Environment.NewLine, assignmentList.ToArray() );
+    }
+	*/
+	
+    /// <summary> This method creates all parameters for a constructor.
+    /// It is not necessarily only for constructor use.  A method like "Set( CustomerID, Name, ...)"
+    /// could use it too.  Rename it when need arises.
+    /// </summary>
+    /// <param name="columnElements"></param>
+    /// <param name="includePrimaryKey">Optional.</param>
+    /// <returns></returns>
+    private static string CreateNamedArgumentListForConstructor( 
+		XmlNodeList columnElements, bool includePrimaryKey = true )
+    {
+        var assignmentList = new List<string>();
+        foreach( XmlElement columnElement in columnElements )
+        {
+			var columnName = columnElement.Attributes["Name"].Value;
+            if( bool.Parse( columnElement.Attributes["IsPrimaryKey"].Value ) && ! includePrimaryKey )
+            {
+                //    The column is part of the primary key and we don't want it according to parameter.
+            }
+            else
+            {
+                assignmentList.Add( columnName + " = " + columnName );
             }    
         }
         return string.Join( "," + Environment.NewLine, assignmentList.ToArray() );
@@ -583,10 +769,12 @@
         return ret;
     }
 
+	/*
     /// <summary>This method takes a column and returns a C# property.
     /// </summary>
     /// <param name="col"></param>
     /// <returns></returns>
+	[ Obsolete( "Use the XML based CreateAnnotation instead." ) ]
     string GetAnnotations(Column col)
     {
       var builder = new List<string>();
@@ -603,7 +791,8 @@
         var notations = String.Join(", ", builder);
       return builder.Count > 0 ? String.Format("[{0}]{1}", notations, System.Environment.NewLine) : String.Empty;
   }
-
+	*/
+	
     /// <summary>This methods returns an XML as a formatted string.
     /// </summary>
     /// <param name="xmlNode"></param>
@@ -627,16 +816,19 @@
         return bob.ToString(); 
     } 
 
+	/*
     /// <summary>This takes a collection of columns and returns them as a list of C# properties.
     /// </summary>
     /// <param name="columns"></param>
     /// <returns></returns>
+	[ Obsolete( "Use the XML version instead.  If such exists." ) ]
     System.Collections.Generic.IEnumerable<string> GatherProperties(ColumnCollection columns)
     {
         foreach (Column col in columns)
             yield return OutputProperty(col);
     }
-
+	*/
+	
     /// <summary>This method returns the current project the tt file is in in Visual studio.
     /// </summary>
     /// <returns></returns>
@@ -744,12 +936,88 @@
         Out_Text( String.Format(stuff, args) );
     }
 
+	private string OutputDTOClass( XmlElement tableElement, XmlElement dataRoot )
+	{
+		var tableName = tableElement.Attributes["Name"].Value;
+		XmlNodeList columnElements = tableElement.SelectNodes( "Columns/Column" );
+		
+		Out_Header( );
+        Out("");
+        Out("using System;");
+        Out("using System.ComponentModel.DataAnnotations;");
+        Out("");
+        Out( CreateNamespaceSignature( DTONameSpaceName, tableElement, UseSchemaForNamespace ) );
+        Out( "{" );
+        PushIndent("\t");
+            Out( CreateDTOClassSignature( tableElement ) );
+            Out("{");
+	        PushIndent("\t");
+				Out( CreateDTOClassPropertiesString( tableElement ) );
+
+				//    Static constructors.
+                if( false == string.IsNullOrWhiteSpace( DTONameOfStaticConstructor ) )
+                {
+                    Out("");
+                    Out( "/// <summary> This static constructor takes all fields but the primary key." );
+                    Out( "/// </summary>");
+                    Out( "/// <returns></returns>");
+                    Out( CreateMethodSignature( "public", true, tableName, DTONameOfStaticConstructor, columnElements, includePrimaryKey : false ) );
+                    Out("{");
+                    PushIndent("\t");
+                        Out( "return new " + tableName + "()" );
+                        Out( "{" );
+                        PushIndent("\t");
+                            Out( CreateNamedArgumentListForConstructor( columnElements, includePrimaryKey : false ) );
+                        PopIndent();
+                        Out( "};" );
+                    PopIndent();
+                    Out( "}" );
+                    Out("");
+                    Out( "/// <summary> This static constructor takes all fields including the primary key." );
+                    Out( "/// </summary>");
+                    Out( "/// <returns></returns>");
+                    Out( CreateMethodSignature( "public", true, tableName, DTONameOfStaticConstructor, columnElements ) );
+                    Out("{");
+                    PushIndent("\t");
+                        Out( "return new " + tableName + "()" );
+                        Out( "{" );
+                        PushIndent("\t");
+                            Out( CreateNamedArgumentListForConstructor( columnElements, includePrimaryKey : true ) );
+                        PopIndent();
+                        Out( "};" );
+                    PopIndent();
+                    Out("}");
+                    PopIndent();
+				}
+                    PushIndent("\t");
+			PopIndent();
+			Out( "}" );
+		PopIndent();
+		Out( "}" );
+		return tableName;
+	}
+
+	private void OutputDTOClasses( XmlDocument xmlSchemaDoc, XmlDocument xmlDataDoc )
+	{
+		foreach( XmlElement tableElement in xmlSchemaDoc.DocumentElement.SelectNodes(
+			"/Database/Tables/Table[@Include='True']" ) )
+		{
+			var fileName = OutputDTOClass( tableElement, xmlDataDoc.DocumentElement );
+            var pathFile = SaveOutput( 
+				Path.Combine( DTOOutputPath, string.Format( DTOFileNameFormat, fileName ) )
+			);
+            AddFileToProject( pathFile );
+		}
+	}
+
+	/*
     /// <summary>This method writes a DTO class file.
     /// It's inner construction is a remain since the ST4bby days in that it uses the
     /// Microsoft.SqlServer.Management.Smo for data and not the XML file.
     /// </summary>
     /// <param name="namespaceName"></param>
     /// <param name="table"></param>
+	[ Obsolete( "Use the XML version instead." ) ]
     void OutputDTOClass(string namespaceName, Table table)
     {
         Out("// This class is automatically generated by MooDAL {0}.", System.DateTime.Now.ToString("u"));
@@ -807,11 +1075,14 @@
         PopIndent();
         Out("}");
     }
-
+	*/
+	
+	/*
     /// <summary>This method writes a column as a C# property.
     /// </summary>
     /// <param name="column"></param>
     /// <returns></returns>
+	[Obsolete( "Use the XML version instead.  If such exists." ) ]
     private string OutputProperty(Column column)
     {
         var isNullable       = column.Nullable;
@@ -822,7 +1093,8 @@
 
         return String.Format("{0}public {1} {2} {{ get; set; }}", annotations, String.Format(typeFormat,type), column.Name);
     }
-
+	*/
+	
     /// <summary>This method writes all Surface files.
     /// </summary>
     /// <param name="namespaceName"></param>
@@ -1034,7 +1306,7 @@
                 AppendAttribute( columnElement, "IsPrimaryKey", column.InPrimaryKey );
                 AppendAttribute( columnElement, "IsForeignKey", column.IsForeignKey );
                 AppendAttribute( columnElement, "IsIdentity", column.Identity );  // Is really "identity" a good word for "autocounting pk" or whatever is a better name?
-                AppendAttribute( columnElement, "Length", column.DataType.MaximumLength );
+                AppendAttribute( columnElement, "MaximumLength", column.DataType.MaximumLength );
 
                 //  Foreign keys are printed if any exists.
                 //  http://msdn.microsoft.com/en-us/library/microsoft.sqlserver.management.smo.foreignkey.aspx
@@ -1154,6 +1426,14 @@
             Out( "/// <returns>" + returnText + "</returns>" );
         }
     }
+	
+	/// <summary>This method writes the header that should be in every file.
+	/// </summary>
+	private void Out_Header()
+	{
+        Out("// This class is automatically generated by MooDAL {0}.", System.DateTime.Now.ToString("u"));
+        Out("// Read more at https://github.com/LosManos/MooD4L/");
+	}
 
     /// <summary>This method writes a create method for a table and index/foreign key.
     /// </summary>
