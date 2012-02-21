@@ -49,8 +49,6 @@
 			conn.Open();
 			var xmlSchemaDoc = ReadXmlFile( xmlSchemaPathFile );
             OutputSurface( SurfaceNameSpaceName, xmlSchemaDoc );
-      
-			//	Generate the DTO classes.
 
 			//    Create DTO class output directory if needed.
             var dtoClassOutputDirectory = Path.Combine( Path.GetDirectoryName(Host.TemplateFile), DTOOutputPath );
@@ -58,10 +56,13 @@
                 Directory.CreateDirectory( dtoClassOutputDirectory );
             }
 
+			//	Generate the Enums.
 			var xmlDataDoc = ReadXmlFile( xmlDataPathFile );
+			OutputEnumClasses( xmlDataDoc );
+			
+			//	Generate the DTO classes.
 			OutputDTOClasses( xmlSchemaDoc, xmlDataDoc );
 			
-
 			//	This loop will in the future be moved to a method of its own, 
 			//	like that of OutputSurface.
 			/*
@@ -241,13 +242,13 @@
 			( UseSchemaForNamespace ? "." + table.Attributes["Schema"].Value : "" ) +
 			"." + tableName;
 	}
-	
+
 	/// <summary>This method returns a property declaration for a DTO class.
 	/// E.g.: "public int CustomerID;"
 	/// </summary>
 	/// <param name="columnElement"></param>
 	/// <returns></returns>
-	private static string CreateDTOClassPropertyString( XmlElement columnElement )
+	private static string CreateDTOClassPropertyWithAnnotationString( XmlElement columnElement )
 	{
 		return 
 			CreateAnnotation( columnElement ) + 
@@ -270,7 +271,7 @@
 		
 		foreach( XmlElement columnElement in tableElement.SelectNodes( "Columns/Column" ) )
 		{
-			retList.Add( CreateDTOClassPropertyString( columnElement ) );
+			retList.Add( CreateDTOClassPropertyWithAnnotationString( columnElement ) );
 		}
 		
 		return string.Join( Environment.NewLine + Environment.NewLine, retList );
@@ -936,6 +937,61 @@
         Out_Text( String.Format(stuff, args) );
     }
 
+	/// <summary>This method prints XML comments for a method.
+    /// </summary>
+    /// <param name="summaryText">The summary text.  Line breaks are formatted accordingly.</param>
+    /// <param name="parameter">A param line will be written with this parameter's name.</param>
+	/// /// <param name="returnText">Optional. If passed along a returns line will be written.  This has, as of yet, not correctly formatted line breaks.  Feel free to implement.</param>
+    private void Out_XmlComment( string summaryText, string parameter, string returnText = null )
+    {
+		Out_XmlComment( summaryText, new string[]{parameter}, returnText );
+	}
+	
+    /// <summary>This method prints XML comments for a method.
+    /// </summary>
+    /// <param name="summaryText">The summary text.  Line breaks are formatted accordingly.</param>
+    /// <param name="parameterList">Optional.  If passed along, param lines will be written.</param>
+    /// <param name="returnText">Optional. If passed along a returns line will be written.  This has, as of yet, not correctly formatted line breaks.  Feel free to implement.</param>
+    private void Out_XmlComment( string summaryText, IEnumerable<string> parameterList = null, string returnText = null )
+    {
+
+        //  Print the Summary part.
+        var summaryTextArray = Regex.Split( summaryText, Environment.NewLine );
+        for( var i=0 ; i<summaryTextArray.Count() ; ++i )
+        {
+            if( i == 0 )
+            {
+                Out( "/// <summary>" + summaryTextArray[0] );
+            }
+            else
+            {
+                Out( " /// " + summaryTextArray[i] );
+            }
+        }
+        Out( "/// </summary>" );
+
+        //  Print the Parameters part.
+        if( parameterList != null )
+        {
+            foreach( string parameter in parameterList )
+            {
+                Out( "/// <param name=\"" + parameter + "\"></param>" );
+            }
+        }
+
+        //  Print the Returns part.
+        if( returnText != null )
+        {
+            // TODO: Create a proper return text split as with Summary.  Issue #2.
+            Out( "/// <returns>" + returnText + "</returns>" );
+        }
+    }
+
+	/// <summary>This method writes a DTO class file.
+    /// </summary>
+	/// <param name="tableElement"></param>
+	/// <param name="dataRoot"></param>
+	/// <returns></returns>
 	private string OutputDTOClass( XmlElement tableElement, XmlElement dataRoot )
 	{
 		var tableName = tableElement.Attributes["Name"].Value;
@@ -1094,6 +1150,65 @@
         return String.Format("{0}public {1} {2} {{ get; set; }}", annotations, String.Format(typeFormat,type), column.Name);
     }
 	*/
+	
+	/// <summary>This method writes all Enum files.
+	/// </summary>
+	/// <param name="xmlDataDoc"></param>
+	private void OutputEnumClasses( XmlDocument xmlDataDoc )
+	{
+		XmlElement dataRoot = xmlDataDoc.DocumentElement;
+		foreach( XmlElement enumTableElement in dataRoot.SelectNodes( "/Database/EnumTables/EnumTable" ) )
+		{
+			var fileName = OutputEnumClassFile( enumTableElement ) + ".MooD4L.cs";
+            var enumPathFile = SaveOutput( 
+				Path.Combine( Path.GetDirectoryName(Host.TemplateFile), 
+					Path.Combine( DTOOutputPath, fileName ) ) );
+            AddFileToProject( enumPathFile );			
+		}
+	}
+	
+	/// <summary>This method writes one Enum file.
+	/// </summary>
+	/// <param name="enumTableElement"></param>
+	/// <returns>The enum name.</returns>
+	private string OutputEnumClassFile( XmlElement enumTableElement )
+	{
+		Out_Header();
+        Out("");
+        Out("using System;");
+        Out("using System.ComponentModel.DataAnnotations;");
+        Out("");
+        Out( CreateNamespaceSignature( DTONameSpaceName, enumTableElement, UseSchemaForNamespace ) );
+        Out( "{" );
+	    PushIndent("\t");
+		
+			var rowElements = enumTableElement.SelectNodes( "Rows/Row");
+			if( rowElements.Count == 0 )
+			{
+				Out_Comment( "There are no rows in table " + enumTableElement.Attributes["Name"].Value + "." );
+				Out_Comment( "Is it correct?" );
+			}
+			else
+			{
+				Out( "public enum " + enumTableElement.Attributes["Name"].Value + "Enum" );
+				Out( "{" );
+		    	PushIndent("\t");
+					var enumStringList = new List<string>();
+					foreach( XmlElement rowElement in rowElements )
+					{
+						enumStringList.Add(
+							rowElement.Attributes["Name"].Value + " = " + rowElement.Attributes["ID"].Value
+						);
+					}
+					Out( string.Join( "," + Environment.NewLine, enumStringList ) );
+				PopIndent();
+				Out( "}" );
+			}
+		PopIndent();
+		Out( "}" );
+		return enumTableElement.Attributes["Name"].Value + "Enum";
+		//asdf
+	}
 	
     /// <summary>This method writes all Surface files.
     /// </summary>
@@ -1376,56 +1491,17 @@
 
         Out( FormatXml( doc ) );
     }
-
-	/// <summary>This method prints XML comments for a method.
-    /// </summary>
-    /// <param name="summaryText">The summary text.  Line breaks are formatted accordingly.</param>
-    /// <param name="parameter">A param line will be written with this parameter's name.</param>
-	/// /// <param name="returnText">Optional. If passed along a returns line will be written.  This has, as of yet, not correctly formatted line breaks.  Feel free to implement.</param>
-    private void Out_Comment( string summaryText, string parameter, string returnText = null )
-    {
-		Out_Comment( summaryText, new string[]{parameter}, returnText );
-	}
 	
-    /// <summary>This method prints XML comments for a method.
-    /// </summary>
-    /// <param name="summaryText">The summary text.  Line breaks are formatted accordingly.</param>
-    /// <param name="parameterList">Optional.  If passed along, param lines will be written.</param>
-    /// <param name="returnText">Optional. If passed along a returns line will be written.  This has, as of yet, not correctly formatted line breaks.  Feel free to implement.</param>
-    private void Out_Comment( string summaryText, IEnumerable<string> parameterList = null, string returnText = null )
-    {
-
-        //  Print the Summary part.
-        var summaryTextArray = Regex.Split( summaryText, Environment.NewLine );
-        for( var i=0 ; i<summaryTextArray.Count() ; ++i )
-        {
-            if( i == 0 )
-            {
-                Out( "/// <summary>" + summaryTextArray[0] );
-            }
-            else
-            {
-                Out( " /// " + summaryTextArray[i] );
-            }
-        }
-        Out( "/// </summary>" );
-
-        //  Print the Parameters part.
-        if( parameterList != null )
-        {
-            foreach( string parameter in parameterList )
-            {
-                Out( "/// <param name=\"" + parameter + "\"></param>" );
-            }
-        }
-
-        //  Print the Returns part.
-        if( returnText != null )
-        {
-            // TODO: Create a proper return text split as with Summary.  Issue #2.
-            Out( "/// <returns>" + returnText + "</returns>" );
-        }
-    }
+	/// <summary>This method writes a comment with C# style double slashes.
+	/// </summary>
+	/// <param name="stuff"></param>
+	private void Out_Comment( string stuff )
+	{
+        foreach( string line in stuff.Split(new string[] { Environment.NewLine }, StringSplitOptions.None) )
+		{
+			Out( "//\t" + line );
+		}
+	}
 	
 	/// <summary>This method writes the header that should be in every file.
 	/// </summary>
@@ -1447,7 +1523,7 @@
         XmlElement tableElement, 
         IEnumerable<XmlElement> columnList )
     {
-        Out_Comment(
+        Out_XmlComment(
             "This method inserts every field in the " + tableName + " table" +
             " exclusive the primary key(s).", 
             columnList.Select( c => c.Attributes["Name"].Value )
@@ -1527,7 +1603,7 @@
         //  Then we make sure the same signature is not used twice.
         var methodSigList = new HashSet<string>();
 
-        Out_Comment( "This method deletes all records in the " + tableName + " table." );
+        Out_XmlComment( "This method deletes all records in the " + tableName + " table." );
         Out_Text( @"
             public void DeleteAll()
             {{
@@ -1574,7 +1650,7 @@
                 schemaName + "." + tableName :
                 tableName;
 
-        Out_Comment( 
+        Out_XmlComment( 
             string.Format( @"This method uses the {1} index/fk{0}for deleting a record.  Filtering is dune by field(s) {2}.{3}", 
                 Environment.NewLine, 
                 ixfkName, 
@@ -1678,7 +1754,7 @@
         IEnumerable<XmlNode> columnsUsedInIxFk
     )
     {
-        Out_Comment( 
+        Out_XmlComment( 
             string.Format( @"This method uses the {1} index{0}for searching of field(s) {2}.{3}", 
                 Environment.NewLine, 
                 indexName, 
@@ -1760,7 +1836,7 @@
         var methodSigList = new HashSet<string>();
 
         //  Start by creating a FindAll method.
-        Out_Comment( "This method returns all records in the table " + tableName + "." );
+        Out_XmlComment( "This method returns all records in the table " + tableName + "." );
         Out_Text( @"
             public List<{0}.{1}{2}> FindAll()
             {{
@@ -1861,7 +1937,7 @@
         
 		if( byColumns ){
 			//	Create a method that takes all table columns as parameters.
-	        Out_Comment(
+	        Out_XmlComment(
 	            "This method updates every field in the " + tableName + " table.", 
 	            columnList.Select( c => c.Attributes["Name"].Value )
 	        );
@@ -1898,7 +1974,7 @@
 	        Out( "}" );
 		}else{
 			//	Create a method that takes an object as parameter.
-	        Out_Comment(
+	        Out_XmlComment(
 	            "This method updates every field in the " + tableName + " table.", 
 	            tableName
 	        );
