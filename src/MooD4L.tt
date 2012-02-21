@@ -30,28 +30,29 @@
             var tables = new Server(serverConnection).Databases[DatabaseName].Tables;
 	
 			//	Generate the XML schema file.
-
-			
             OutputXmlSchema( new Server(serverConnection).Databases[DatabaseName] );
             var xmlSchemaPathFile = SaveOutput( "MooD4L.schema.xml" );
             AddFileToProject( xmlSchemaPathFile );
 
 			conn.Close();
+			
 			//	Generate the XML data file.
 			
 			conn.Open();
 			OutputXmlData(xmlSchemaPathFile, conn);
-			conn.Close();	
+			conn.Close();
 			var xmlDataPathFile = SaveOutput( "MooD4L.data.xml" );
 			AddFileToProject( xmlDataPathFile );
-
-			conn.Open();
+		
 			//	Generate the Surface files.
 
+			conn.Open();
 			var xmlDataDoc = ReadXmlFile( xmlSchemaPathFile );
             OutputSurface( SurfaceNameSpaceName, xmlDataDoc );
       
 			//	Generate the DTO classes.
+			//	This loop will in the future be moved to a method of its own, 
+			//	like that of OutputSurface.
 			
             //    Create DTO class output directory if needed.
             var dtoClassOutputDirectory = Path.Combine( Path.GetDirectoryName(Host.TemplateFile), DTOOutputPath );
@@ -75,6 +76,7 @@
 		//	Out(...) here results in update of MooD4L.cs.
 		//	Use it for for instance outputting comments of what is happening, 
 		//	a log if you prefer.
+		Out( "//	MooD4L was latest run at " + DateTime.Now.ToString() );
 
 		}
 			
