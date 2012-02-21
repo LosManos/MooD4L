@@ -986,6 +986,17 @@
             Out( "/// <returns>" + returnText + "</returns>" );
         }
     }
+	
+	/// <summary>This method writes an XML comment remark.
+	/// As for now it can only handle one row.  Feel free to use the code of 
+	/// Out_XmlComment (which should be renamed Out_XmlSummary), refactor them
+	/// and make also this method multi line.
+	/// </summary>
+	/// <param name="remark"></param>
+	private void Out_XmlRemarks( string remark )
+	{
+		Out( "/// <remarks> " + remark + " </remarks>" );
+	}
 
 	/// <summary>This method writes a DTO class file.
     /// </summary>
@@ -1202,7 +1213,7 @@
 					"by table(s) " + string.Join( ", ", fkList.Select( fk => fk.ParentNode.ParentNode.Attributes["Name"].Value ) ) + "."
 				);
 				Out( "public enum " + tableName + "Enum" );
-				Out( "{" );
+				Out( "{ // Template code {48B4D330-4AF6-4266-8453-14CF55F82D47}." );
 		    	PushIndent("\t");
 					var enumStringList = new List<string>();
 					foreach( XmlElement rowElement in rowElements )
