@@ -76,7 +76,7 @@
 		//	Out(...) here results in update of MooD4L.cs.
 		//	Use it for for instance outputting comments of what is happening, 
 		//	a log if you prefer.
-		Out( "//	MooD4L was latest run at " + DateTime.Now.ToString("u") );
+		Out( "//	MooD4L was latest run at " + DateTime.Now.ToString("u") ); 
 
 		}
 			
