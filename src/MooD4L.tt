@@ -254,7 +254,7 @@
 			CreateAnnotation( columnElement ) + 
 			Environment.NewLine + 
 			"public " + 
-			CreateMethodParameter( columnElement ) + 
+			CreateMethodParameter( columnElement, enumSensitive : true ) + 
 			" { get; set; }";
 	}
 	
@@ -320,7 +320,67 @@
         return ret;
 	}
 
-    /// <summary>This method returns the text that should go into every file header.
+	/// <summary>This method takes a columns and returns its type.
+	/// It checks if the type is an enum.
+	/// E.g.: "int" is returned for CustomerID while
+	/// "CustomerTypeEnum" is returned for CustomerType.
+	/// </summary>
+	/// <param name="columnNode"></param>
+	/// <returns></returns>
+	private static string CreateEnumTypeFromColumn( XmlNode columnNode )
+	{
+		//	See if we have a FK pointing to this column.  This is done by checking if the table
+		//	has a foreign key pointing to an enum table.
+		//	Start by finding any FKs to this column.  The FKs we are interested in is stored
+		//	at table level, hence the ParentNodeX2.
+		var tableElement = columnNode.ParentNode.ParentNode;
+		var tableName = tableElement.Attributes["Name"].Value;
+		var columnName = columnNode.Attributes["Name"].Value;
+		var foreignKeyColumnNodes = tableElement.SelectNodes( 
+			string.Format( "ForeignKeys/ForeignKey/Columns/Column[@Name='{0}']", 
+				columnName )
+		);
+		if( foreignKeyColumnNodes.Count == 0 )
+		{	//	There are no foreign keys pointing to this column.  So return the dotnettype.
+			return columnNode.Attributes["DotnetType"].Value;
+		}
+		else if( foreignKeyColumnNodes.Count >= 2 )
+		{	//	Let's bail out totally if there is more than 1 FK.  Reduces the complexity of the
+			//	code and pushes the problem to the future.
+			throw new System.Exception( 
+				string.Format( 
+					"The code cannot handle more than 1 foreign key for an enumtable-referencing column.  Feel free to fix, it is open source after all. {0}" +
+					"The table {1} with column {2} is the culprit.", 
+					Environment.NewLine, 
+					tableName, 
+					columnName )
+			);
+		}
+		
+		//	Now we know we have at least 1 foreign key pointing to this column.
+		//	Is it coming from an enum table?
+		string referencedTableName = foreignKeyColumnNodes[0].ParentNode.ParentNode.Attributes["ReferencedTable"].Value;
+		if( IsEnumTable( referencedTableName ) )
+		{
+			return DTONameSpaceName + "." + CreateEnumTableName( referencedTableName );
+		}
+		else
+		{
+			return columnNode.Attributes["DotnetType"].Value;
+		}
+	}
+	
+	/// <summary>This method takes a table's name and returns it as it's enum table variant.
+	/// E.g.: CustomerType becomes CustomerTypeEnum.
+	/// </summary>
+	/// <param name="tableName"></param>
+	/// <returns></returns>
+	private static string CreateEnumTableName( string tableName )
+	{
+		return tableName + "Enum";
+	}
+
+	/// <summary>This method returns the text that should go into every file header.
     /// </summary>
     /// <param name="commentPrefix"></param>
     /// <param name="null"></param>
@@ -415,20 +475,21 @@
     /// as the method parameter.
     /// E.g.: "int CustomerID" or "int? UserID" or "string Name".
     /// </summary>
-    /// <param name="node"></param>
+    /// <param name="columnNode"></param>
     /// <returns></returns>
-    private static string CreateMethodParameter( XmlNode node )
+    private static string CreateMethodParameter( XmlNode columnNode, bool enumSensitive = true )
     {
-        var isNullable = bool.Parse( node.Attributes["IsNullable"].Value );
-        var parameterName = node.Attributes["Name"].Value;
-        var parameterType = node.Attributes["DotnetType"].Value;
+        var isNullable = bool.Parse( columnNode.Attributes["IsNullable"].Value );
+        var parameterName = columnNode.Attributes["Name"].Value;
+        var parameterType = enumSensitive ?
+			CreateEnumTypeFromColumn( columnNode ) :
+			columnNode.Attributes["DotnetType"].Value;
         /* var type = TypeMappings.ContainsKey( parameterType ) ? 
             TypeMappings[parameterType] : "string"; */
         var typeFormat       = parameterType != "string" && isNullable ? "Nullable<{0}>" : "{0}";
 		return CreateMethodParameter( String.Format(typeFormat, parameterType), parameterName );
-        //return String.Format("{0} {1}", String.Format(typeFormat, parameterType), parameterName);
     }
-	
+		
 	/// <summary>This method returns typically something like "int CustomerID".
 	/// Feel free to overload with smart parameters so one can, in an easy-to-read way
 	/// create nullable parameters and parameters with default values.
@@ -440,6 +501,18 @@
 	{
 		return typeName + " " + variableName;
 	}
+
+    /// <summary>This method is used for creating a unique key for what a method has as signature.
+    /// The name and return type of the method is missing by purpose; when creating methods automatically
+    /// we want to make sure that not two methods use the same signature and storing the values
+    /// returned by this method makes it possible to ferret out those methods.
+    /// </summary>
+    /// <param name="usedColumns"></param>
+    /// <returns></returns>
+    private static string CreateMethodSig( IEnumerable<XmlElement> usedColumns )
+    {
+        return string.Join( ",", usedColumns.Select( c => c.Attributes["Name"].Value ) );
+     }
 
     /// <summary>This method returns e.g. "CustomerID = CustomerID" for a column.
     /// </summary>
@@ -473,11 +546,13 @@
         return string.Join( ", ", CreateObjectAssignmentParameterList( nodeList ) );
     }
 
+	/*
     /// <summary> This method creates a parameter for a method from a column.
     /// E.g.: "int CustomerID" or "string Name".
     /// </summary>
     /// <param name="column"></param>
     /// <returns></returns>
+	[ Obsolete( "Use the XML version instead." ) ]
     private static string CreateMethodParameter( Column column )
     {
         var isNullable       = column.Nullable;
@@ -486,19 +561,8 @@
 
         return String.Format("{0} {1}", String.Format(typeFormat,type), column.Name);
     }
-
-    /// <summary>This method is used for creating a unique key for what a method has as signature.
-    /// The name and return type of the method is missing by purpose; when creating methods automatically
-    /// we want to make sure that not two methods use the same signature and storing the values
-    /// returned by this method makes it possible to ferret out those methods.
-    /// </summary>
-    /// <param name="usedColumns"></param>
-    /// <returns></returns>
-    private string CreateMethodSig( IEnumerable<XmlElement> usedColumns )
-    {
-        return string.Join( ",", usedColumns.Select( c => c.Attributes["Name"].Value ) );
-     }
-
+	*/
+	
 	/*
     /// <summary> This method creates a method signature.
     /// E.g.: "private void Set( CustomerID, Name )".
@@ -860,7 +924,7 @@
     /// </summary>
     /// <param name="table">The table in question.</param>
     /// <returns></returns>
-    private bool IsClassOkToGenerate( Table table )
+    private static bool IsClassOkToGenerate( Table table )
     {
         if( false == string.IsNullOrWhiteSpace( ExcludeTablesRegex ) &&
             ( table.IsSystemObject || Regex.IsMatch( table.Name, ExcludeTablesRegex ) ) )
@@ -870,6 +934,15 @@
             return true;
         }
     }
+	
+	/// <summary>This method returns true if the table sent as parameter is an Enum table.
+	/// </summary>
+	/// <param name="tableName"></param>
+	/// <returns></returns>
+	private static bool IsEnumTable( string tableName )
+	{
+		return Regex.IsMatch( tableName, EnumTables );
+	}
 
     /// <summary>This method writes the text in the paramter.
     /// </summary>
@@ -986,17 +1059,6 @@
             Out( "/// <returns>" + returnText + "</returns>" );
         }
     }
-	
-	/// <summary>This method writes an XML comment remark.
-	/// As for now it can only handle one row.  Feel free to use the code of 
-	/// Out_XmlComment (which should be renamed Out_XmlSummary), refactor them
-	/// and make also this method multi line.
-	/// </summary>
-	/// <param name="remark"></param>
-	private void Out_XmlRemarks( string remark )
-	{
-		Out( "/// <remarks> " + remark + " </remarks>" );
-	}
 
 	/// <summary>This method writes a DTO class file.
     /// </summary>
@@ -1198,38 +1260,32 @@
         Out( CreateNamespaceSignature( DTONameSpaceName, enumTableElement, UseSchemaForNamespace ) );
         Out( "{" );
 	    PushIndent("\t");
+			var fkList = ToList( foreignKeys );
 			var rowElements = enumTableElement.SelectNodes( "Rows/Row");
-			if( rowElements.Count == 0 )
-			{
-				Out_Comment( "There are no rows in table " + tableName + "." );
-				Out_Comment( "Is it correct?" );
-			}
-			else
-			{
-				var fkList = ToList( foreignKeys );
-				Out_XmlComment( 
-					"This enum contains the rows of table " + tableName + "." + Environment.NewLine +
-					"It is used through foreign key(s) " + string.Join( ", ", fkList.Select( fk => fk.Attributes["Name"].Value ) ) + "." + Environment.NewLine +
-					"by table(s) " + string.Join( ", ", fkList.Select( fk => fk.ParentNode.ParentNode.Attributes["Name"].Value ) ) + "."
-				);
-				Out( "public enum " + tableName + "Enum" );
-				Out( "{ // Template code {48B4D330-4AF6-4266-8453-14CF55F82D47}." );
-		    	PushIndent("\t");
-					var enumStringList = new List<string>();
-					foreach( XmlElement rowElement in rowElements )
-					{
-						enumStringList.Add(
-							rowElement.Attributes["Name"].Value + " = " + rowElement.Attributes["ID"].Value
-						);
-					}
-					Out( string.Join( "," + Environment.NewLine, enumStringList ) );
-				PopIndent();
-				Out( "}" );
-			}
+			Out_XmlComment( 
+				"This enum contains the rows of table " + tableName + "." + Environment.NewLine +
+				"It is used through foreign key(s) " + string.Join( ", ", fkList.Select( fk => fk.Attributes["Name"].Value ) ) + "." + Environment.NewLine +
+				"by table(s) " + string.Join( ", ", fkList.Select( fk => fk.ParentNode.ParentNode.Attributes["Name"].Value ) ) + "."  +
+				( rowElements.Count == 0 ?
+					Environment.NewLine + "There are no rows in table " + tableName + ". Is it correct?" :
+					"" )
+			);
+			Out( "public enum " + CreateEnumTableName( tableName ) );
+			Out( "{ // Template code {48B4D330-4AF6-4266-8453-14CF55F82D47}." );
+	    	PushIndent("\t");
+				var enumStringList = new List<string>();
+				foreach( XmlElement rowElement in rowElements )
+				{
+					enumStringList.Add(
+						rowElement.Attributes["Name"].Value + " = " + rowElement.Attributes["ID"].Value
+					);
+				}
+				Out( string.Join( "," + Environment.NewLine, enumStringList ) );
+			PopIndent();
+			Out( "}" );
 		PopIndent();
 		Out( "}" );
-		return tableName + "Enum";
-		//asdf
+		return CreateEnumTableName( tableName );
 	}
 	
     /// <summary>This method writes all Surface files.
@@ -1392,8 +1448,19 @@
 				tableName  )
 		);
 	}
-    
-    /// <summary>This method writes chosen parts of the database's schema to a file.
+	
+	/// <summary>This method writes an XML comment remark.
+	/// As for now it can only handle one row.  Feel free to use the code of 
+	/// Out_XmlComment (which should be renamed Out_XmlSummary), refactor them
+	/// and make also this method multi line.
+	/// </summary>
+	/// <param name="remark"></param>
+	private void Out_XmlRemarks( string remark )
+	{
+		Out( "/// <remarks> " + remark + " </remarks>" );
+	}
+
+	/// <summary>This method writes chosen parts of the database's schema to a file.
     /// </summary>
     /// <param name="database"></param>
     private void OutputXmlSchema( Database database )
@@ -1407,6 +1474,7 @@
         // have 2 roots)
         doc.AppendChild(doc.CreateProcessingInstruction("xml", "version=\"1.0\" encoding=\"UTF-8\""));
 
+		//	<Database>
         var elem = doc.CreateElement( "Database" );
         doc.AppendChild( elem );
         var databaseRoot = doc.DocumentElement;
@@ -1416,23 +1484,27 @@
 
         AppendAttribute( databaseRoot, "Name", database.Name );
         
+		//	<Database><Tables>
         var tablesElement = AppendChildElement( databaseRoot, "Tables" );
 
         foreach( Table table in database.Tables )
         {
+			//	<Database><Tables><Table>
             var tableElement = AppendChildElement( tablesElement, "Table" );
             AppendAttribute( tableElement, "Name", table.Name );
             AppendAttribute( tableElement, "Include", IsClassOkToGenerate( table ) );
             AppendAttribute( tableElement, "Schema", table.Schema );
-			AppendAttribute( tableElement, "IsEnum", Regex.IsMatch( table.Name, EnumTables ) );
+			AppendAttribute( tableElement, "IsEnum", IsEnumTable( table.Name ) );
             InsertCommentBefore( tableElement, "Name is the tablename, " + 
                 "Include is if the table should be included (all tables are in the schema but not all should become code, " +
                 "and Schema is the schema the table is in." );
 
+			//	<Database><Tables><Table><Columns>
             var columnsElement = AppendChildElement( tableElement, "Columns" );
 
             foreach( Column column in table.Columns )
             {
+				//	<Database><Tables><Table><Columns><Column>
                 var columnElement = AppendChildElement( columnsElement, "Column" );
                 AppendAttribute( columnElement, "Name", column.Name );
                 AppendAttribute( columnElement, "IsNullable", column.Nullable );
@@ -1449,10 +1521,12 @@
                 //  http://msdn.microsoft.com/en-us/library/microsoft.sqlserver.management.smo.foreignkey.aspx
                 if( column.EnumForeignKeys().Rows.Count >= 1 )
                 {
+					//	<Database><Tables><Table><Columns><Column><ForeignKeys>
                     var columnForeignKeysElement = AppendChildElement( columnElement, "ForeignKeys" );
 
                     foreach( System.Data.DataRow row in column.EnumForeignKeys().Rows )
                     {
+						//	<Database><Tables><Table><Columns><Column><ForeignKeys><ForeignKey>
                         var columnForeignKeyElement = AppendChildElement( columnForeignKeysElement, "ForeignKey" );
                         AppendAttribute( columnForeignKeyElement, "Schema", row[0].ToString() );
                         AppendAttribute( columnForeignKeyElement, "ColumName", row[1].ToString() );
@@ -1463,19 +1537,23 @@
 
             if( table.ForeignKeys.Count >= 1 )
             {   
+				//	<Database><Tables><Table><ForeignKeys>
                 var tableForeignKeysElement = AppendChildElement( tableElement, "ForeignKeys" );
                 foreach( ForeignKey foreignKey in table.ForeignKeys )
                 {
+				//	<Database><Tables><Table><ForeignKeys><ForeignKey>
                     var foreignKeyElement = AppendChildElement( tableForeignKeysElement, "ForeignKey" );
                     AppendAttribute( foreignKeyElement, "Name", foreignKey.Name );
                     AppendAttribute( foreignKeyElement, "ReferencedKey", foreignKey.ReferencedKey );
                     AppendAttribute( foreignKeyElement, "ReferencedTable", foreignKey.ReferencedTable );
                     InsertCommentBefore( foreignKeyElement, "The ForeignKey Name is the name of the FK.  ReferencedKey is the name of the index on the \"other\" side." );
 
+					//	<Database><Tables><Table><ForeignKeys><ForeignKey><Columns>
                     var foreignKeyColumnsElement = AppendChildElement( foreignKeyElement, "Columns" );
                     foreach( ForeignKeyColumn column in foreignKey.Columns )
                     {   
-                        // http://msdn.microsoft.com/en-us/library/microsoft.sqlserver.management.smo.foreignkeycolumn.aspx
+						//	<Database><Tables><Table><ForeignKeys><ForeignKey><Columns><Column>
+	                    // http://msdn.microsoft.com/en-us/library/microsoft.sqlserver.management.smo.foreignkeycolumn.aspx
                         var foreignKeyColumnElement = AppendChildElement( foreignKeyColumnsElement, "Column" );
                         AppendAttribute( foreignKeyColumnElement, "Name", column.Name );
                         AppendAttribute( foreignKeyColumnElement, "ReferencedColumn", column.ReferencedColumn );
@@ -1557,7 +1635,7 @@
         );
         
         Out_Text( @"
-            {{
+            {{    // Template code {{A4830D85-3274-4D81-B3DE-55E7773AE8BE}}.
                 var ctx = MakeConnectionAndTransaction();
                 ctx.Conn.Execute( 
                     {0}, 
