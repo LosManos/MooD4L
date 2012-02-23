@@ -1252,6 +1252,8 @@
 	private string OutputEnumClassFile( XmlElement enumTableElement, XmlNodeList foreignKeys )
 	{
 		string tableName = enumTableElement.Attributes["Name"].Value;
+		string idColumnName = enumTableElement.Attributes["IDColumnName"].Value;
+		string nameColumnName = enumTableElement.Attributes["NameColumnName"].Value;
 		Out_Header();
         Out("");
         Out("using System;");
@@ -1263,7 +1265,8 @@
 			var fkList = ToList( foreignKeys );
 			var rowElements = enumTableElement.SelectNodes( "Rows/Row");
 			Out_XmlComment( 
-				"This enum contains the rows of table " + tableName + "." + Environment.NewLine +
+				"This enum contains the rows of table " + tableName + Environment.NewLine +
+				"and the columns are " + idColumnName + " and " + nameColumnName + "." + Environment.NewLine + 
 				"It is used through foreign key(s) " + string.Join( ", ", fkList.Select( fk => fk.Attributes["Name"].Value ) ) + "." + Environment.NewLine +
 				"by table(s) " + string.Join( ", ", fkList.Select( fk => fk.ParentNode.ParentNode.Attributes["Name"].Value ) ) + "."  +
 				( rowElements.Count == 0 ?
@@ -1273,11 +1276,15 @@
 			Out( "public enum " + CreateEnumTableName( tableName ) );
 			Out( "{ // Template code {48B4D330-4AF6-4266-8453-14CF55F82D47}." );
 	    	PushIndent("\t");
+				Out( "" );
 				var enumStringList = new List<string>();
 				foreach( XmlElement rowElement in rowElements )
 				{
+					var enumValue = rowElement.Attributes["ID"].Value;
 					enumStringList.Add(
-						rowElement.Attributes["Name"].Value + " = " + rowElement.Attributes["ID"].Value
+						CreateXmlSummary( "Value is " + enumValue + "." ) +
+						Environment.NewLine + 
+						rowElement.Attributes["Name"].Value + " = " + enumValue
 					);
 				}
 				Out( string.Join( "," + Environment.NewLine, enumStringList ) );
@@ -1432,7 +1439,28 @@
         Out( FormatXml( doc ) );
 	}
 	
+	/// <summary>This method takes a string and puts in inside summary tags.
+	/// It is used for createing XML comments.
+	/// There is a method Out_XmlComment that doesn't use this method.  Should it?
+	/// </summary>
+	/// <param name="comment"></param>
+	/// <returns></returns>
+	private static string CreateXmlSummary( string comment )
+	{
+		var lineList = new List<string>();
+        foreach( string line in comment.Split(new string[] { Environment.NewLine }, StringSplitOptions.None) )
+		{
+			lineList.Add( line );
+		}
+		lineList[0] = "<summary>" + lineList[0];
+		lineList.Add( "</summary>" );
+		return string.Join( Environment.NewLine, lineList.Select( s => "/// " + s ) );
+	}
+	
 	// Please rename and explain and put in place.
+	// It returns the columns of an enumtable.
+	// E.g.: for table is "CustomerType"
+	// and corresponding columns could be "CustomerTypeID", "Name".
 	private Tuple<string, string> EnumTableColumnsX( string tableName )
 	{
 		foreach( string key in EnumTableColumns.Keys )
@@ -1449,17 +1477,6 @@
 		);
 	}
 	
-	/// <summary>This method writes an XML comment remark.
-	/// As for now it can only handle one row.  Feel free to use the code of 
-	/// Out_XmlComment (which should be renamed Out_XmlSummary), refactor them
-	/// and make also this method multi line.
-	/// </summary>
-	/// <param name="remark"></param>
-	private void Out_XmlRemarks( string remark )
-	{
-		Out( "/// <remarks> " + remark + " </remarks>" );
-	}
-
 	/// <summary>This method writes chosen parts of the database's schema to a file.
     /// </summary>
     /// <param name="database"></param>
