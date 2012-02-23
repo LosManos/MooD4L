@@ -858,6 +858,28 @@
   }
 	*/
 	
+	/// <summary>This method returns the column names used by an enum table.
+	/// E.g.: for table is "CustomerType"
+	/// and corresponding columns could be "CustomerTypeID", "Name" and "Description".
+	/// </summary>
+	/// <param name="tableName"></param>
+	/// <returns></returns>
+	private Tuple<string, string, string> EnumTableColumnsByTableName( string tableName )
+	{
+		foreach( string key in EnumTableColumns.Keys )
+		{
+			if( Regex.IsMatch( tableName, key ) )
+			{
+				return EnumTableColumns[key];
+			}
+		}
+		throw new System.Exception( 
+			string.Format( 
+				"The table {0} does not have a match in EnumTableColumns", 
+				tableName  )
+		);
+	}
+	
     /// <summary>This methods returns an XML as a formatted string.
     /// </summary>
     /// <param name="xmlNode"></param>
@@ -1281,8 +1303,17 @@
 				foreach( XmlElement rowElement in rowElements )
 				{
 					var enumValue = rowElement.Attributes["ID"].Value;
+					var enumDescription =
+						null == rowElement.Attributes["Description"] ?
+							null :
+							rowElement.Attributes["Description"].Value;
 					enumStringList.Add(
-						CreateXmlSummary( "Value is " + enumValue + "." ) +
+						CreateXmlSummary( 
+							"Value is " + enumValue + 
+							( null == enumDescription ?
+								"." :
+								Environment.NewLine + "and the description is \"" + enumDescription + "\"." )
+						) +
 						Environment.NewLine + 
 						rowElement.Attributes["Name"].Value + " = " + enumValue
 					);
@@ -1408,10 +1439,16 @@
 		{
 			var tableName = tableElement.Attributes["Name"].Value;
 
-			var pkColumnName = EnumTableColumnsX( tableName ).Item1;
-			var nameColumnName = EnumTableColumnsX( tableName ).Item2;
+			var pkColumnName = EnumTableColumnsByTableName( tableName ).Item1;
+			var nameColumnName = EnumTableColumnsByTableName( tableName ).Item2;
+			var descriptionColumnName = EnumTableColumnsByTableName( tableName ).Item3;
+				
 			AppendAttribute( tableElement, "IDColumnName", pkColumnName );
 			AppendAttribute( tableElement, "NameColumnName", nameColumnName );
+			if( null != descriptionColumnName )
+			{
+				AppendAttribute( tableElement, "DescriptionColumnName", descriptionColumnName );
+			}
 
 			var cmd = new SqlCommand( 
 				string.Format( "select * from {0}", tableName ), 
@@ -1427,6 +1464,10 @@
 					var rowElement = AppendChildElement( rowsElement, "Row" );
 					AppendAttribute( rowElement, "ID", reader[ pkColumnName ].ToString() );
 					AppendAttribute( rowElement, "Name", reader[ nameColumnName ].ToString() );
+					if( null != descriptionColumnName )
+					{
+						AppendAttribute( rowElement, "Description", reader[ descriptionColumnName ].ToString() );
+					}
 				}
 			}
 			AppendAttribute( tableElement, "RecordCount", recordCount );
@@ -1455,26 +1496,6 @@
 		lineList[0] = "<summary>" + lineList[0];
 		lineList.Add( "</summary>" );
 		return string.Join( Environment.NewLine, lineList.Select( s => "/// " + s ) );
-	}
-	
-	// Please rename and explain and put in place.
-	// It returns the columns of an enumtable.
-	// E.g.: for table is "CustomerType"
-	// and corresponding columns could be "CustomerTypeID", "Name".
-	private Tuple<string, string> EnumTableColumnsX( string tableName )
-	{
-		foreach( string key in EnumTableColumns.Keys )
-		{
-			if( Regex.IsMatch( tableName, key ) )
-			{
-				return EnumTableColumns[key];
-			}
-		}
-		throw new System.Exception( 
-			string.Format( 
-				"The table {0} does not have a match in EnumTableColumns", 
-				tableName  )
-		);
 	}
 	
 	/// <summary>This method writes chosen parts of the database's schema to a file.

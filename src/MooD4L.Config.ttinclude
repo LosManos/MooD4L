@@ -42,15 +42,16 @@
     //    { "ProjectStatus", new Tuple<string, string>( "ProjectStatusID", "Name" ) }, 
     //    { @"\w+Type|+.IssueStatus", new Tuple<string, string, string>( "ID", "Name" ) }
     // Comments below is an alternative implementation; which is not implemented.
+    // The array gives a more compact, but less compile safe, syntax.
     // readonly Dictionary<string, string[]> EnumTableColumns = new Dictionary<string, string[]>{
     //	{ "a", new string[]{ "c", "d" } }, 
     //	{ "b", new string[]{ "c", "d" } }
     //};
 	
-    readonly Dictionary<string, Tuple<string, string>> EnumTableColumns = 
-        new Dictionary<string, Tuple<string, string>>{
-	        { "VerifyPartyStatus", new Tuple<string, string>( "ID", "Name" ) }, 
-	        { @"\w+Type", new Tuple<string, string>( "ID", "Name" ) }
+    readonly Dictionary<string, Tuple<string, string, string>> EnumTableColumns = 
+        new Dictionary<string, Tuple<string, string, string>>{
+	        { "CustomerStatus", new Tuple<string, string, string>( "ID", "Name" ) }, 
+	        { @"\w+Type", new Tuple<string, string, string>( "ID", "Name" ) }
     };
 
     // Set to true for having the schema in the namespace affect the namespace.
