@@ -1678,11 +1678,11 @@
                 ctx.Conn.Execute( 
                     {0}, 
                     {1},
-                    ctx.Trans
+                    transaction: ctx.Trans
                 );
                 var res = ctx.Conn.Query<int>(
                     {2},
-                    ctx.Trans
+                    transaction: ctx.Trans
                 );
                 return (int)res.Single();
             }}"
@@ -2091,7 +2091,7 @@
 	                ctx.Conn.Execute(
 	                    {0},
 	                    {1}, 
-	                    ctx.Trans);", 
+	                    transaction : ctx.Trans);", 
 	                string.Format( 
 	                    "\"update {1}{2} set {3} where {4}\"", 
 	                    Environment.NewLine, 
