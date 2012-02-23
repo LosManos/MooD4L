@@ -1503,6 +1503,7 @@
     /// <param name="database"></param>
     private void OutputXmlSchema( Database database )
     {
+		//	The Microsoft.SqlServer.Management.Smo namespace:
         //  http://msdn.microsoft.com/en-us/library/microsoft.sqlserver.management.smo.aspx
 
         var doc = new XmlDocument();
@@ -1602,12 +1603,15 @@
 
             if( table.Indexes.Count >= 1 )
             {
+				//	<Database><Tables><Table><Indexes>
                 var indexesElement = AppendChildElement( tableElement, "Indexes" );
                 foreach( Index index in table.Indexes )
                 {
                     //  http://msdn.microsoft.com/en-us/library/microsoft.sqlserver.management.smo.index.aspx
+					//	<Database><Tables><Table><Indexes><Index>
                     var indexElement = AppendChildElement( indexesElement, "Index" );
                     AppendAttribute( indexElement, "Name", index.Name );
+					AppendAttribute( indexElement, "IsUnique", index.IsUnique );
                     //  http://msdn.microsoft.com/en-us/library/microsoft.sqlserver.management.smo.indexkeytype.aspx
                     AppendAttribute( indexElement, "IndexType", 
                         index.IndexKeyType == IndexKeyType.None ? "NotUnique" :
@@ -1615,6 +1619,7 @@
                         index.IndexKeyType == IndexKeyType.DriUniqueKey ? "Unique" :
                         "Unknown - Error in script"
                     );
+				//	<Database><Tables><Table><Indexes><Index><Columns>
                     var indexColumnsElement = AppendChildElement( indexElement, "Columns" );
                     foreach( IndexedColumn column in index.IndexedColumns )
                     {
@@ -1883,12 +1888,14 @@
     /// <param name="schemaName"></param>
     /// <param name="indexName"></param>
     /// <param name="isPrimaryKey"></param>
+	/// <param name="indexIsPrimaryKey"></param>
     /// <param name="columnsUsedInIxFk"></param>
     private void Out_SurfaceRetrieveMethod( 
         string tableName, 
         string schemaName, 
         string indexName, 
 		bool indexIsPrimaryKey, 
+		bool isUnique, 
         IEnumerable<XmlNode> columnsUsedInIxFk
     )
     {
@@ -1907,14 +1914,14 @@
 
         // TODO: Move method signature creator to a method of its own.        
         var s = "public ";
-        if( false == indexIsPrimaryKey ){
+        if( false == indexIsPrimaryKey && false == isUnique ){
             s += "IEnumerable<";
         }
         s += 
             DTONameSpaceName + "." + 
             ( UseSchemaForNamespace ? schemaName + "." : "" ) +
             tableName;
-        if( false == indexIsPrimaryKey ){
+        if( false == indexIsPrimaryKey && false == isUnique ){
             s += ">";
         }
         s += " Retrieve";
@@ -1929,7 +1936,7 @@
         
         Out( s );
         Out_Text( @"
-            {{
+            {{    //    Template code {{AFC9B1DC-8A17-4CC5-9CE8-01BBF6444987}}.
                 var ctx = MakeConnectionAndTransaction();
                 var res = ctx.Conn.Query<{0}.{1}{2}>( 
                     {3},
@@ -1949,7 +1956,7 @@
                     tableName + 
                     " where " + CreateQuerySelectEqualParameterListString( columnsUsedInIxFk ) + "\"", 
                 "new { " + CreateObjectAssignmentParameterListString( columnsUsedInIxFk ) + " }", 
-                ( indexIsPrimaryKey ? ".Single()" : "" )
+                ( indexIsPrimaryKey || isUnique ? ".Single()" : "" )
             );
     }
 
@@ -1977,7 +1984,7 @@
         Out_XmlComment( "This method returns all records in the table " + tableName + "." );
         Out_Text( @"
             public List<{0}.{1}{2}> FindAll()
-            {{
+            {{    //    Template code {{3B60535E-B7B6-4C99-B2C3-E63393EB5BBF}}
                 using( var conn = CreateConnection() )
                 {{
                     conn.Open();
@@ -2040,9 +2047,14 @@
             {
                 methodSigList.Add( paramString );    // Add the new unique string of method parameters.
 
-                XmlAttribute indexTypeAttribute = indexElement.Attributes["IndexType"];
+                //XmlAttribute indexTypeAttribute = indexElement.Attributes["IndexType"];
                 bool isPrimaryKey = 
                     usedColumns.All( c => bool.Parse( c.Attributes["IsPrimaryKey"].Value ) );
+				XmlAttribute isUniqueAttribute = indexElement.Attributes["IsUnique"];
+				bool isUnique = 
+					( null  == isUniqueAttribute ?
+						false :
+						bool.Parse( isUniqueAttribute.Value ) );
                 string indexName = indexElement.Attributes["Name"].Value;
 
                 Out_SurfaceRetrieveMethod( 
@@ -2052,6 +2064,7 @@
                         null, 
                     indexName, 
                     isPrimaryKey, 
+					isUnique, 
                     usedColumns );
                 Out( "" );
             }
