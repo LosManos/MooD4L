@@ -25,47 +25,47 @@
     {
       var connectionString = GetConnectionString();
         using(SqlConnection conn = new SqlConnection(connectionString))
-        {			
+        {           
             var serverConnection = new ServerConnection(conn);
             var tables = new Server(serverConnection).Databases[DatabaseName].Tables;
-	
-			//	Generate the XML schema file.
+    
+            //  Generate the XML schema file.
             OutputXmlSchema( new Server(serverConnection).Databases[DatabaseName] );
             var xmlSchemaPathFile = SaveOutput( "MooD4L.schema.xml" );
             AddFileToProject( xmlSchemaPathFile );
 
-			conn.Close();
-			
-			//	Generate the XML data file.
-			
-			conn.Open();
-			OutputXmlData(xmlSchemaPathFile, conn);
-			conn.Close();
-			var xmlDataPathFile = SaveOutput( "MooD4L.data.xml" );
-			AddFileToProject( xmlDataPathFile );
-		
-			//	Generate the Surface files.
+            conn.Close();
+            
+            //  Generate the XML data file.
+            
+            conn.Open();
+            OutputXmlData(xmlSchemaPathFile, conn);
+            conn.Close();
+            var xmlDataPathFile = SaveOutput( "MooD4L.data.xml" );
+            AddFileToProject( xmlDataPathFile );
+        
+            //  Generate the Surface files.
 
-			conn.Open();
-			var xmlSchemaDoc = ReadXmlFile( xmlSchemaPathFile );
+            conn.Open();
+            var xmlSchemaDoc = ReadXmlFile( xmlSchemaPathFile );
             OutputSurface( SurfaceNameSpaceName, xmlSchemaDoc );
 
-			//    Create DTO class output directory if needed.
+            //    Create DTO class output directory if needed.
             var dtoClassOutputDirectory = Path.Combine( Path.GetDirectoryName(Host.TemplateFile), DTOOutputPath );
             if( false == Directory.Exists( dtoClassOutputDirectory ) ){
                 Directory.CreateDirectory( dtoClassOutputDirectory );
             }
 
-			//	Generate the Enums.
-			var xmlDataDoc = ReadXmlFile( xmlDataPathFile );
-			OutputEnumClasses( xmlSchemaDoc, xmlDataDoc );
-			
-			//	Generate the DTO classes.
-			OutputDTOClasses( xmlSchemaDoc, xmlDataDoc );
-			
-			//	This loop will in the future be moved to a method of its own, 
-			//	like that of OutputSurface.
-			/*
+            //  Generate the Enums.
+            var xmlDataDoc = ReadXmlFile( xmlDataPathFile );
+            OutputEnumClasses( xmlSchemaDoc, xmlDataDoc );
+            
+            //  Generate the DTO classes.
+            OutputDTOClasses( xmlSchemaDoc, xmlDataDoc );
+            
+            //  This loop will in the future be moved to a method of its own, 
+            //  like that of OutputSurface.
+            /*
             foreach (Table table in tables)
             {
                 if ( IsClassOkToGenerate( table ) )
@@ -79,16 +79,16 @@
                 }
             }
             */
-			
-		//	Out(...) here results in update of MooD4L.cs.
-		//	Use it for for instance outputting comments of what is happening, 
-		//	a log if you prefer.
-		Out( "//	MooD4L was latest run at " + DateTime.Now.ToString("u") );
+            
+        //  Out(...) here results in update of MooD4L.cs.
+        //  Use it for for instance outputting comments of what is happening, 
+        //  a log if you prefer.
+        Out( "//    MooD4L was latest run at " + DateTime.Now.ToString("u") );
 
-		}
+        }
 
     }
-	
+    
 #>
 <#+
     
@@ -191,99 +191,99 @@
         return usedColumns;
     }
 
-	/// <summary>This method creates the C# code that is a property annotation.
-	/// </summary>
-	/// <param name="columnElement"></param>
-	/// <returns></returns>
-	private static string CreateAnnotation( XmlElement columnElement )
-	{
-		int maximumLength = int.Parse( columnElement.Attributes["MaximumLength"].Value );
-		bool isNullable = bool.Parse( columnElement.Attributes["IsNullable"].Value );
-		bool isPrimaryKey = bool.Parse( columnElement.Attributes["IsPrimaryKey"].Value );
-    	var canHaveLength = new string[] { "nvarchar", "varchar", "char", "nchar" };
+    /// <summary>This method creates the C# code that is a property annotation.
+    /// </summary>
+    /// <param name="columnElement"></param>
+    /// <returns></returns>
+    private static string CreateAnnotation( XmlElement columnElement )
+    {
+        int maximumLength = int.Parse( columnElement.Attributes["MaximumLength"].Value );
+        bool isNullable = bool.Parse( columnElement.Attributes["IsNullable"].Value );
+        bool isPrimaryKey = bool.Parse( columnElement.Attributes["IsPrimaryKey"].Value );
+        var canHaveLength = new string[] { "nvarchar", "varchar", "char", "nchar" };
 
-    	var retList = new List<string>();
-    	if ( canHaveLength.Contains( columnElement.Attributes["DbType"].Value ) && 
-			maximumLength > -1 )
-		{
+        var retList = new List<string>();
+        if ( canHaveLength.Contains( columnElement.Attributes["DbType"].Value ) && 
+            maximumLength > -1 )
+        {
             retList.Add( String.Format("StringLength({0})", maximumLength));
-		}
+        }
         if ( false == isNullable )
-		{
+        {
             retList.Add("Required");
-		}
+        }
         if ( isPrimaryKey )
-		{
-        	retList.Add("Key");
-		}
-		
-		if( retList.Count >=1 )
-		{
-			return "[" + string.Join( ", ", retList ) + "]";
-    	}
-		else
-		{
-			return string.Empty;
-		}
-	}
-	
-	/// <summary>This method returns a DTO class declaration.
-	/// Us it for creating ... DTO class declarations!
-	/// I.e.: DTO.Customer Customer
-	/// or DTO.db.Customer customer.
-	/// </summary>
-	/// <param name="table"></param>
-	/// <returns></returns>
-	private static string CreateDTOClassDeclarationType( XmlNode table )
-	{
-		var tableName = table.Attributes["Name"].Value;
-		return
-			DTONameSpaceName +
-			( UseSchemaForNamespace ? "." + table.Attributes["Schema"].Value : "" ) +
-			"." + tableName;
-	}
+        {
+            retList.Add("Key");
+        }
+        
+        if( retList.Count >=1 )
+        {
+            return "[" + string.Join( ", ", retList ) + "]";
+        }
+        else
+        {
+            return string.Empty;
+        }
+    }
+    
+    /// <summary>This method returns a DTO class declaration.
+    /// Us it for creating ... DTO class declarations!
+    /// I.e.: DTO.Customer Customer
+    /// or DTO.db.Customer customer.
+    /// </summary>
+    /// <param name="table"></param>
+    /// <returns></returns>
+    private static string CreateDTOClassDeclarationType( XmlNode table )
+    {
+        var tableName = table.Attributes["Name"].Value;
+        return
+            DTONameSpaceName +
+            ( UseSchemaForNamespace ? "." + table.Attributes["Schema"].Value : "" ) +
+            "." + tableName;
+    }
 
-	/// <summary>This method returns a property declaration for a DTO class.
-	/// E.g.: "public int CustomerID;"
-	/// </summary>
-	/// <param name="columnElement"></param>
-	/// <returns></returns>
-	private static string CreateDTOClassPropertyWithAnnotationString( XmlElement columnElement )
-	{
-		return 
-			CreateAnnotation( columnElement ) + 
-			Environment.NewLine + 
-			"public " + 
-			CreateMethodParameter( columnElement, enumSensitive : true ) + 
-			" { get; set; }";
-	}
-	
-	/// <summary>This method returns a string that is all properties declarations for a DTO class.
-	/// E.g.: 
-	/// 	public int CustomerID;
-	/// 	public string Name;
-	/// </summary>
-	/// <param name="tableElement"></param>
-	/// <returns></returns>
-	private static string CreateDTOClassPropertiesString( XmlElement tableElement )
-	{
-		var retList = new List<string>();
-		
-		foreach( XmlElement columnElement in tableElement.SelectNodes( "Columns/Column" ) )
-		{
-			retList.Add( CreateDTOClassPropertyWithAnnotationString( columnElement ) );
-		}
-		
-		return string.Join( Environment.NewLine + Environment.NewLine, retList );
-	}
+    /// <summary>This method returns a property declaration for a DTO class.
+    /// E.g.: "public int CustomerID;"
+    /// </summary>
+    /// <param name="columnElement"></param>
+    /// <returns></returns>
+    private static string CreateDTOClassPropertyWithAnnotationString( XmlElement columnElement )
+    {
+        return 
+            CreateAnnotation( columnElement ) + 
+            Environment.NewLine + 
+            "public " + 
+            CreateMethodParameter( columnElement, enumSensitive : true ) + 
+            " { get; set; }";
+    }
+    
+    /// <summary>This method returns a string that is all properties declarations for a DTO class.
+    /// E.g.: 
+    ///     public int CustomerID;
+    ///     public string Name;
+    /// </summary>
+    /// <param name="tableElement"></param>
+    /// <returns></returns>
+    private static string CreateDTOClassPropertiesString( XmlElement tableElement )
+    {
+        var retList = new List<string>();
+        
+        foreach( XmlElement columnElement in tableElement.SelectNodes( "Columns/Column" ) )
+        {
+            retList.Add( CreateDTOClassPropertyWithAnnotationString( columnElement ) );
+        }
+        
+        return string.Join( Environment.NewLine + Environment.NewLine, retList );
+    }
 
-	/*
+    /*
     /// <summary> This method creates the signature for the class.
     /// E.g.: public partial class Customer()
     /// </summary>
     /// <param name="table"></param>
     /// <returns></returns>
-	[ Obsolete( "Use XML version instead." ) ]
+    [ Obsolete( "Use XML version instead." ) ]
    private static string CreateDTOClassSignature( Table table )
    {
         var ret = "public";
@@ -298,15 +298,15 @@
         }
         return ret;
    }
-	*/
-	
+    */
+    
     /// <summary> This method creates the signature for the class.
     /// E.g.: public partial class Customer()
-	/// </summary>
-	/// <param name="tableElement"></param>
-	/// <returns></returns>
-	private static string CreateDTOClassSignature( XmlElement tableElement )
-	{
+    /// </summary>
+    /// <param name="tableElement"></param>
+    /// <returns></returns>
+    private static string CreateDTOClassSignature( XmlElement tableElement )
+    {
         var ret = "public";
         if( DTOUsePartialClass )
         {
@@ -318,69 +318,69 @@
             ret += " : " + DTOClassInheritFrom;
         }
         return ret;
-	}
+    }
 
-	/// <summary>This method takes a columns and returns its type.
-	/// It checks if the type is an enum.
-	/// E.g.: "int" is returned for CustomerID while
-	/// "CustomerTypeEnum" is returned for CustomerType.
-	/// </summary>
-	/// <param name="columnNode"></param>
-	/// <returns></returns>
-	private static string CreateEnumTypeFromColumn( XmlNode columnNode )
-	{
-		//	See if we have a FK pointing to this column.  This is done by checking if the table
-		//	has a foreign key pointing to an enum table.
-		//	Start by finding any FKs to this column.  The FKs we are interested in is stored
-		//	at table level, hence the ParentNodeX2.
-		var tableElement = columnNode.ParentNode.ParentNode;
-		var tableName = tableElement.Attributes["Name"].Value;
-		var columnName = columnNode.Attributes["Name"].Value;
-		var foreignKeyColumnNodes = tableElement.SelectNodes( 
-			string.Format( "ForeignKeys/ForeignKey/Columns/Column[@Name='{0}']", 
-				columnName )
-		);
-		if( foreignKeyColumnNodes.Count == 0 )
-		{	//	There are no foreign keys pointing to this column.  So return the dotnettype.
-			return columnNode.Attributes["DotnetType"].Value;
-		}
-		else if( foreignKeyColumnNodes.Count >= 2 )
-		{	//	Let's bail out totally if there is more than 1 FK.  Reduces the complexity of the
-			//	code and pushes the problem to the future.
-			throw new System.Exception( 
-				string.Format( 
-					"The code cannot handle more than 1 foreign key for an enumtable-referencing column.  Feel free to fix, it is open source after all. {0}" +
-					"The table {1} with column {2} is the culprit.", 
-					Environment.NewLine, 
-					tableName, 
-					columnName )
-			);
-		}
-		
-		//	Now we know we have at least 1 foreign key pointing to this column.
-		//	Is it coming from an enum table?
-		string referencedTableName = foreignKeyColumnNodes[0].ParentNode.ParentNode.Attributes["ReferencedTable"].Value;
-		if( IsEnumTable( referencedTableName ) )
-		{
-			return DTONameSpaceName + "." + CreateEnumTableName( referencedTableName );
-		}
-		else
-		{
-			return columnNode.Attributes["DotnetType"].Value;
-		}
-	}
-	
-	/// <summary>This method takes a table's name and returns it as it's enum table variant.
-	/// E.g.: CustomerType becomes CustomerTypeEnum.
-	/// </summary>
-	/// <param name="tableName"></param>
-	/// <returns></returns>
-	private static string CreateEnumTableName( string tableName )
-	{
-		return tableName + "Enum";
-	}
+    /// <summary>This method takes a columns and returns its type.
+    /// It checks if the type is an enum.
+    /// E.g.: "int" is returned for CustomerID while
+    /// "CustomerTypeEnum" is returned for CustomerType.
+    /// </summary>
+    /// <param name="columnNode"></param>
+    /// <returns></returns>
+    private static string CreateEnumTypeFromColumn( XmlNode columnNode )
+    {
+        //  See if we have a FK pointing to this column.  This is done by checking if the table
+        //  has a foreign key pointing to an enum table.
+        //  Start by finding any FKs to this column.  The FKs we are interested in is stored
+        //  at table level, hence the ParentNodeX2.
+        var tableElement = columnNode.ParentNode.ParentNode;
+        var tableName = tableElement.Attributes["Name"].Value;
+        var columnName = columnNode.Attributes["Name"].Value;
+        var foreignKeyColumnNodes = tableElement.SelectNodes( 
+            string.Format( "ForeignKeys/ForeignKey/Columns/Column[@Name='{0}']", 
+                columnName )
+        );
+        if( foreignKeyColumnNodes.Count == 0 )
+        {   //  There are no foreign keys pointing to this column.  So return the dotnettype.
+            return columnNode.Attributes["DotnetType"].Value;
+        }
+        else if( foreignKeyColumnNodes.Count >= 2 )
+        {   //  Let's bail out totally if there is more than 1 FK.  Reduces the complexity of the
+            //  code and pushes the problem to the future.
+            throw new System.Exception( 
+                string.Format( 
+                    "The code cannot handle more than 1 foreign key for an enumtable-referencing column.  Feel free to fix, it is open source after all. {0}" +
+                    "The table {1} with column {2} is the culprit.", 
+                    Environment.NewLine, 
+                    tableName, 
+                    columnName )
+            );
+        }
+        
+        //  Now we know we have at least 1 foreign key pointing to this column.
+        //  Is it coming from an enum table?
+        string referencedTableName = foreignKeyColumnNodes[0].ParentNode.ParentNode.Attributes["ReferencedTable"].Value;
+        if( IsEnumTable( referencedTableName ) )
+        {
+            return DTONameSpaceName + "." + CreateEnumTableName( referencedTableName );
+        }
+        else
+        {
+            return columnNode.Attributes["DotnetType"].Value;
+        }
+    }
+    
+    /// <summary>This method takes a table's name and returns it as it's enum table variant.
+    /// E.g.: CustomerType becomes CustomerTypeEnum.
+    /// </summary>
+    /// <param name="tableName"></param>
+    /// <returns></returns>
+    private static string CreateEnumTableName( string tableName )
+    {
+        return tableName + "Enum";
+    }
 
-	/// <summary>This method returns the text that should go into every file header.
+    /// <summary>This method returns the text that should go into every file header.
     /// </summary>
     /// <param name="commentPrefix"></param>
     /// <param name="null"></param>
@@ -397,13 +397,13 @@
                 commentSuffix );
     }
 
-	/*
+    /*
     /// <summary>This method returns the C# namespace string to be used in the Surface classes.
     /// </summary>
     /// <param name="namespaceName"></param>
     /// <param name="useSchemaForNamespace"></param>
     /// <returns></returns>
-	[ Obsolete( "Replace with XML version." ) ]
+    [ Obsolete( "Replace with XML version." ) ]
     private static string CreateNamespaceSignature( string namespaceName, Table table, bool useSchemaForNamespace )
     {
         string ret = string.Format( "namespace {0}", namespaceName );
@@ -413,18 +413,18 @@
         }
         return ret;
     }
-	*/
-	
-	/// <summary>This method returns the C# namespace string to be used in the Surface classes.
+    */
+    
+    /// <summary>This method returns the C# namespace string to be used in the Surface classes.
     /// </summary>
     /// <param name="namespaceName"></param>
-	/// <param name="tableElement"></param>
+    /// <param name="tableElement"></param>
     /// <param name="useSchemaForNamespace"></param>
     /// <returns></returns>
     private static string CreateNamespaceSignature( 
-		string namespaceName, 
-		XmlElement tableElement, 
-		bool useSchemaForNamespace )
+        string namespaceName, 
+        XmlElement tableElement, 
+        bool useSchemaForNamespace )
     {
         string ret = string.Format( "namespace {0}", namespaceName );
         if( useSchemaForNamespace )
@@ -482,25 +482,25 @@
         var isNullable = bool.Parse( columnNode.Attributes["IsNullable"].Value );
         var parameterName = columnNode.Attributes["Name"].Value;
         var parameterType = enumSensitive ?
-			CreateEnumTypeFromColumn( columnNode ) :
-			columnNode.Attributes["DotnetType"].Value;
+            CreateEnumTypeFromColumn( columnNode ) :
+            columnNode.Attributes["DotnetType"].Value;
         /* var type = TypeMappings.ContainsKey( parameterType ) ? 
             TypeMappings[parameterType] : "string"; */
         var typeFormat       = parameterType != "string" && isNullable ? "Nullable<{0}>" : "{0}";
-		return CreateMethodParameter( String.Format(typeFormat, parameterType), parameterName );
+        return CreateMethodParameter( String.Format(typeFormat, parameterType), parameterName );
     }
-		
-	/// <summary>This method returns typically something like "int CustomerID".
-	/// Feel free to overload with smart parameters so one can, in an easy-to-read way
-	/// create nullable parameters and parameters with default values.
-	/// </summary>
-	/// <param name="typeName"></param>
-	/// <param name="variableName"></param>
-	/// <returns></returns>
-	private static string CreateMethodParameter( string typeName, string variableName )
-	{
-		return typeName + " " + variableName;
-	}
+        
+    /// <summary>This method returns typically something like "int CustomerID".
+    /// Feel free to overload with smart parameters so one can, in an easy-to-read way
+    /// create nullable parameters and parameters with default values.
+    /// </summary>
+    /// <param name="typeName"></param>
+    /// <param name="variableName"></param>
+    /// <returns></returns>
+    private static string CreateMethodParameter( string typeName, string variableName )
+    {
+        return typeName + " " + variableName;
+    }
 
     /// <summary>This method is used for creating a unique key for what a method has as signature.
     /// The name and return type of the method is missing by purpose; when creating methods automatically
@@ -546,13 +546,13 @@
         return string.Join( ", ", CreateObjectAssignmentParameterList( nodeList ) );
     }
 
-	/*
+    /*
     /// <summary> This method creates a parameter for a method from a column.
     /// E.g.: "int CustomerID" or "string Name".
     /// </summary>
     /// <param name="column"></param>
     /// <returns></returns>
-	[ Obsolete( "Use the XML version instead." ) ]
+    [ Obsolete( "Use the XML version instead." ) ]
     private static string CreateMethodParameter( Column column )
     {
         var isNullable       = column.Nullable;
@@ -561,9 +561,9 @@
 
         return String.Format("{0} {1}", String.Format(typeFormat,type), column.Name);
     }
-	*/
-	
-	/*
+    */
+    
+    /*
     /// <summary> This method creates a method signature.
     /// E.g.: "private void Set( CustomerID, Name )".
     /// </summary>
@@ -575,7 +575,7 @@
     /// <param name="includePrimaryKey">Whether the primary key should be included or not.
     /// New objects often can't have the PK set at the client, only in the database.</param>
     /// <returns></returns>
-	[ Obsolete( "Use the XML based method instead." ) ]
+    [ Obsolete( "Use the XML based method instead." ) ]
     private static string CreateMethodSignature( string scope, bool isStatic, string returnType, string methodName, ColumnCollection columns, bool includePrimaryKey = true )
     {
         string ret = scope;
@@ -607,13 +607,13 @@
         ret += ")";
         return ret;
     }
-	*/
-	
+    */
+    
     private static string CreateMethodSignature( 
-		string scope, bool isStatic, string returnType, string methodName, 
-		XmlNodeList columnElements, 
-		bool includePrimaryKey = true )
-	{
+        string scope, bool isStatic, string returnType, string methodName, 
+        XmlNodeList columnElements, 
+        bool includePrimaryKey = true )
+    {
         string ret = scope;
         if( isStatic )
         {
@@ -628,7 +628,7 @@
         foreach( XmlElement columnElement in columnElements )
         {
             if( bool.Parse( columnElement.Attributes["IsPrimaryKey"].Value ) && 
-				false == includePrimaryKey )
+                false == includePrimaryKey )
             {
                 //    The column is part of the primary key and we don't want it according to parameter.
             }
@@ -640,9 +640,9 @@
         ret += " " + string.Join( ", ", paramList.ToArray() ) + " ";
         ret += ")";
         return ret;
-	}
-	
-	/*
+    }
+    
+    /*
     /// <summary> This method creates all parameters for a constructor.
     /// It is not necessarily only for constructor use.  A method like "Set( CustomerID, Name, ...)"
     /// could use it too.  Rename it when need arises.
@@ -650,7 +650,7 @@
     /// <param name="columns"></param>
     /// <param name="includePrimaryKey"></param>
     /// <returns></returns>
-	[ Obsolete( "Use the XML based version instead." ) ]
+    [ Obsolete( "Use the XML based version instead." ) ]
     private static string CreateNamedArgumentListForConstructor( ColumnCollection columns, bool includePrimaryKey = true )
     {
         var assignmentList = new List<string>();
@@ -667,8 +667,8 @@
         }
         return string.Join( "," + Environment.NewLine, assignmentList.ToArray() );
     }
-	*/
-	
+    */
+    
     /// <summary> This method creates all parameters for a constructor.
     /// It is not necessarily only for constructor use.  A method like "Set( CustomerID, Name, ...)"
     /// could use it too.  Rename it when need arises.
@@ -677,12 +677,12 @@
     /// <param name="includePrimaryKey">Optional.</param>
     /// <returns></returns>
     private static string CreateNamedArgumentListForConstructor( 
-		XmlNodeList columnElements, bool includePrimaryKey = true )
+        XmlNodeList columnElements, bool includePrimaryKey = true )
     {
         var assignmentList = new List<string>();
         foreach( XmlElement columnElement in columnElements )
         {
-			var columnName = columnElement.Attributes["Name"].Value;
+            var columnName = columnElement.Attributes["Name"].Value;
             if( bool.Parse( columnElement.Attributes["IsPrimaryKey"].Value ) && ! includePrimaryKey )
             {
                 //    The column is part of the primary key and we don't want it according to parameter.
@@ -695,33 +695,33 @@
         return string.Join( "," + Environment.NewLine, assignmentList.ToArray() );
     }
 
-	/// <summary>This method returns e.g. ["CustomerID", "Name"] for a list of columns.
-	/// </summary>
-	/// <param name="columnList"></param>
-	/// <returns></returns>
-	private static IEnumerable<string> CreateQueryInsertParameterList( IEnumerable<XmlElement> columnList )
-	{
-		//	return columnList.Select( c => c.Attributes["Name"].Value );
-		return CreateQueryInsertParameterList( null, columnList, null );
-	}
+    /// <summary>This method returns e.g. ["CustomerID", "Name"] for a list of columns.
+    /// </summary>
+    /// <param name="columnList"></param>
+    /// <returns></returns>
+    private static IEnumerable<string> CreateQueryInsertParameterList( IEnumerable<XmlElement> columnList )
+    {
+        //  return columnList.Select( c => c.Attributes["Name"].Value );
+        return CreateQueryInsertParameterList( null, columnList, null );
+    }
 
-	/// <summary>This method returns e.g. ["CustomerTable.CustomerID", "CustomerTable.Name"] for a list of columns.
-	/// </summary>
-	/// <param name="prefix">Whatever goes in front of the column name.  Set to null if not used.</param>
-	/// <param name="columnList"></param>
-	/// <param name="suffix>Whatever goes in front of the column name.  Set to null if not used.</param>
-	/// <returns></returns>
-	private static IEnumerable<string> CreateQueryInsertParameterList( 
-		string prefix, 
-		IEnumerable<XmlElement> columnList, 
-		string suffix )
-	{
-		return columnList.Select( c => 
-			( string.IsNullOrWhiteSpace(prefix) ? "" : prefix ) + 
-			c.Attributes["Name"].Value +
-			( string.IsNullOrWhiteSpace(suffix ) ? "" : suffix )
-		);
-	}
+    /// <summary>This method returns e.g. ["CustomerTable.CustomerID", "CustomerTable.Name"] for a list of columns.
+    /// </summary>
+    /// <param name="prefix">Whatever goes in front of the column name.  Set to null if not used.</param>
+    /// <param name="columnList"></param>
+    /// <param name="suffix>Whatever goes in front of the column name.  Set to null if not used.</param>
+    /// <returns></returns>
+    private static IEnumerable<string> CreateQueryInsertParameterList( 
+        string prefix, 
+        IEnumerable<XmlElement> columnList, 
+        string suffix )
+    {
+        return columnList.Select( c => 
+            ( string.IsNullOrWhiteSpace(prefix) ? "" : prefix ) + 
+            c.Attributes["Name"].Value +
+            ( string.IsNullOrWhiteSpace(suffix ) ? "" : suffix )
+        );
+    }
 
     /// <summary>This method returns e.g. "CustomerID, Name" for a list of columns.
     /// </summary>
@@ -731,24 +731,24 @@
     {
         return string.Join( ", ", CreateQueryInsertParameterList( columnList ) );
     }
-	
-	/// <summary>This method returns e.g. "Customer.CustomeriD, Customer.Name"
-	/// for a list of columns.
-	/// </summary>
-	/// <param name="prefix"></param>
-	/// <param name="columnList"></param>
-	/// <param name="suffix"></param>
-	/// <returns></returns>
+    
+    /// <summary>This method returns e.g. "Customer.CustomeriD, Customer.Name"
+    /// for a list of columns.
+    /// </summary>
+    /// <param name="prefix"></param>
+    /// <param name="columnList"></param>
+    /// <param name="suffix"></param>
+    /// <returns></returns>
     private static string CreateQueryInsertParameterListString( 
-		string prefix, 
-		IEnumerable<XmlElement> columnList, 
-		string suffix )
-	{
+        string prefix, 
+        IEnumerable<XmlElement> columnList, 
+        string suffix )
+    {
         return string.Join( ", ", CreateQueryInsertParameterList( prefix, columnList, suffix ) );
-	}
+    }
 
     /// <summary>This method returns e.g. "@CustomerID, @Name" for a list of columns.
-	/// Feel free to replace with CreateQueryInsertParameterList( "@", ...).
+    /// Feel free to replace with CreateQueryInsertParameterList( "@", ...).
     /// </summary>
     /// <param name="columnList"></param>
     /// <returns></returns>
@@ -834,12 +834,12 @@
         return ret;
     }
 
-	/*
+    /*
     /// <summary>This method takes a column and returns a C# property.
     /// </summary>
     /// <param name="col"></param>
     /// <returns></returns>
-	[ Obsolete( "Use the XML based CreateAnnotation instead." ) ]
+    [ Obsolete( "Use the XML based CreateAnnotation instead." ) ]
     string GetAnnotations(Column col)
     {
       var builder = new List<string>();
@@ -856,30 +856,30 @@
         var notations = String.Join(", ", builder);
       return builder.Count > 0 ? String.Format("[{0}]{1}", notations, System.Environment.NewLine) : String.Empty;
   }
-	*/
-	
-	/// <summary>This method returns the column names used by an enum table.
-	/// E.g.: for table is "CustomerType"
-	/// and corresponding columns could be "CustomerTypeID", "Name" and "Description".
-	/// </summary>
-	/// <param name="tableName"></param>
-	/// <returns></returns>
-	private Tuple<string, string, string> EnumTableColumnsByTableName( string tableName )
-	{
-		foreach( string key in EnumTableColumns.Keys )
-		{
-			if( Regex.IsMatch( tableName, key ) )
-			{
-				return EnumTableColumns[key];
-			}
-		}
-		throw new System.Exception( 
-			string.Format( 
-				"The table {0} does not have a match in EnumTableColumns", 
-				tableName  )
-		);
-	}
-	
+    */
+    
+    /// <summary>This method returns the column names used by an enum table.
+    /// E.g.: for table is "CustomerType"
+    /// and corresponding columns could be "CustomerTypeID", "Name" and "Description".
+    /// </summary>
+    /// <param name="tableName"></param>
+    /// <returns></returns>
+    private Tuple<string, string, string> EnumTableColumnsByTableName( string tableName )
+    {
+        foreach( string key in EnumTableColumns.Keys )
+        {
+            if( Regex.IsMatch( tableName, key ) )
+            {
+                return EnumTableColumns[key];
+            }
+        }
+        throw new System.Exception( 
+            string.Format( 
+                "The table {0} does not have a match in EnumTableColumns", 
+                tableName  )
+        );
+    }
+    
     /// <summary>This methods returns an XML as a formatted string.
     /// </summary>
     /// <param name="xmlNode"></param>
@@ -903,19 +903,19 @@
         return bob.ToString(); 
     } 
 
-	/*
+    /*
     /// <summary>This takes a collection of columns and returns them as a list of C# properties.
     /// </summary>
     /// <param name="columns"></param>
     /// <returns></returns>
-	[ Obsolete( "Use the XML version instead.  If such exists." ) ]
+    [ Obsolete( "Use the XML version instead.  If such exists." ) ]
     System.Collections.Generic.IEnumerable<string> GatherProperties(ColumnCollection columns)
     {
         foreach (Column col in columns)
             yield return OutputProperty(col);
     }
-	*/
-	
+    */
+    
     /// <summary>This method returns the current project the tt file is in in Visual studio.
     /// </summary>
     /// <returns></returns>
@@ -956,15 +956,15 @@
             return true;
         }
     }
-	
-	/// <summary>This method returns true if the table sent as parameter is an Enum table.
-	/// </summary>
-	/// <param name="tableName"></param>
-	/// <returns></returns>
-	private static bool IsEnumTable( string tableName )
-	{
-		return Regex.IsMatch( tableName, EnumTables );
-	}
+    
+    /// <summary>This method returns true if the table sent as parameter is an Enum table.
+    /// </summary>
+    /// <param name="tableName"></param>
+    /// <returns></returns>
+    private static bool IsEnumTable( string tableName )
+    {
+        return Regex.IsMatch( tableName, EnumTables );
+    }
 
     /// <summary>This method writes the text in the paramter.
     /// </summary>
@@ -1032,16 +1032,16 @@
         Out_Text( String.Format(stuff, args) );
     }
 
-	/// <summary>This method prints XML comments for a method.
+    /// <summary>This method prints XML comments for a method.
     /// </summary>
     /// <param name="summaryText">The summary text.  Line breaks are formatted accordingly.</param>
     /// <param name="parameter">A param line will be written with this parameter's name.</param>
-	/// /// <param name="returnText">Optional. If passed along a returns line will be written.  This has, as of yet, not correctly formatted line breaks.  Feel free to implement.</param>
+    /// /// <param name="returnText">Optional. If passed along a returns line will be written.  This has, as of yet, not correctly formatted line breaks.  Feel free to implement.</param>
     private void Out_XmlComment( string summaryText, string parameter, string returnText = null )
     {
-		Out_XmlComment( summaryText, new string[]{parameter}, returnText );
-	}
-	
+        Out_XmlComment( summaryText, new string[]{parameter}, returnText );
+    }
+    
     /// <summary>This method prints XML comments for a method.
     /// </summary>
     /// <param name="summaryText">The summary text.  Line breaks are formatted accordingly.</param>
@@ -1082,17 +1082,17 @@
         }
     }
 
-	/// <summary>This method writes a DTO class file.
+    /// <summary>This method writes a DTO class file.
     /// </summary>
-	/// <param name="tableElement"></param>
-	/// <param name="dataRoot"></param>
-	/// <returns></returns>
-	private string OutputDTOClass( XmlElement tableElement, XmlElement dataRoot )
-	{
-		var tableName = tableElement.Attributes["Name"].Value;
-		XmlNodeList columnElements = tableElement.SelectNodes( "Columns/Column" );
-		
-		Out_Header( );
+    /// <param name="tableElement"></param>
+    /// <param name="dataRoot"></param>
+    /// <returns></returns>
+    private string OutputDTOClass( XmlElement tableElement, XmlElement dataRoot )
+    {
+        var tableName = tableElement.Attributes["Name"].Value;
+        XmlNodeList columnElements = tableElement.SelectNodes( "Columns/Column" );
+        
+        Out_Header( );
         Out("");
         Out("using System;");
         Out("using System.ComponentModel.DataAnnotations;");
@@ -1102,10 +1102,10 @@
         PushIndent("\t");
             Out( CreateDTOClassSignature( tableElement ) );
             Out("{");
-	        PushIndent("\t");
-				Out( CreateDTOClassPropertiesString( tableElement ) );
+            PushIndent("\t");
+                Out( CreateDTOClassPropertiesString( tableElement ) );
 
-				//    Static constructors.
+                //    Static constructors.
                 if( false == string.IsNullOrWhiteSpace( DTONameOfStaticConstructor ) )
                 {
                     Out("");
@@ -1139,36 +1139,36 @@
                     PopIndent();
                     Out("}");
                     PopIndent();
-				}
+                }
                     PushIndent("\t");
-			PopIndent();
-			Out( "}" );
-		PopIndent();
-		Out( "}" );
-		return tableName;
-	}
+            PopIndent();
+            Out( "}" );
+        PopIndent();
+        Out( "}" );
+        return tableName;
+    }
 
-	private void OutputDTOClasses( XmlDocument xmlSchemaDoc, XmlDocument xmlDataDoc )
-	{
-		foreach( XmlElement tableElement in xmlSchemaDoc.DocumentElement.SelectNodes(
-			"/Database/Tables/Table[@Include='True']" ) )
-		{
-			var fileName = OutputDTOClass( tableElement, xmlDataDoc.DocumentElement );
+    private void OutputDTOClasses( XmlDocument xmlSchemaDoc, XmlDocument xmlDataDoc )
+    {
+        foreach( XmlElement tableElement in xmlSchemaDoc.DocumentElement.SelectNodes(
+            "/Database/Tables/Table[@Include='True']" ) )
+        {
+            var fileName = OutputDTOClass( tableElement, xmlDataDoc.DocumentElement );
             var pathFile = SaveOutput( 
-				Path.Combine( DTOOutputPath, string.Format( DTOFileNameFormat, fileName ) )
-			);
+                Path.Combine( DTOOutputPath, string.Format( DTOFileNameFormat, fileName ) )
+            );
             AddFileToProject( pathFile );
-		}
-	}
+        }
+    }
 
-	/*
+    /*
     /// <summary>This method writes a DTO class file.
     /// It's inner construction is a remain since the ST4bby days in that it uses the
     /// Microsoft.SqlServer.Management.Smo for data and not the XML file.
     /// </summary>
     /// <param name="namespaceName"></param>
     /// <param name="table"></param>
-	[ Obsolete( "Use the XML version instead." ) ]
+    [ Obsolete( "Use the XML version instead." ) ]
     void OutputDTOClass(string namespaceName, Table table)
     {
         Out("// This class is automatically generated by MooDAL {0}.", System.DateTime.Now.ToString("u"));
@@ -1226,14 +1226,14 @@
         PopIndent();
         Out("}");
     }
-	*/
-	
-	/*
+    */
+    
+    /*
     /// <summary>This method writes a column as a C# property.
     /// </summary>
     /// <param name="column"></param>
     /// <returns></returns>
-	[Obsolete( "Use the XML version instead.  If such exists." ) ]
+    [Obsolete( "Use the XML version instead.  If such exists." ) ]
     private string OutputProperty(Column column)
     {
         var isNullable       = column.Nullable;
@@ -1244,88 +1244,88 @@
 
         return String.Format("{0}public {1} {2} {{ get; set; }}", annotations, String.Format(typeFormat,type), column.Name);
     }
-	*/
-	
-	/// <summary>This method writes all Enum files.
-	/// </summary>
-	/// <param name="xmlSchemaDoc"></param>
-	/// <param name="xmlDataDoc"></param>
-	private void OutputEnumClasses( XmlDocument xmlSchemaDoc, XmlDocument xmlDataDoc )
-	{
-		XmlElement schemaRoot = xmlSchemaDoc.DocumentElement;
-		XmlElement dataRoot = xmlDataDoc.DocumentElement;
-		foreach( XmlElement enumTableElement in dataRoot.SelectNodes( "/Database/EnumTables/EnumTable" ) )
-		{
-			var tableName = enumTableElement.Attributes["Name"].Value;
-			XmlNodeList foreignKeys = schemaRoot.SelectNodes( "//Table/ForeignKeys/ForeignKey[@ReferencedTable='" + tableName+ "']" );
-			var fileName = OutputEnumClassFile( enumTableElement, foreignKeys ) + ".MooD4L.cs";
+    */
+    
+    /// <summary>This method writes all Enum files.
+    /// </summary>
+    /// <param name="xmlSchemaDoc"></param>
+    /// <param name="xmlDataDoc"></param>
+    private void OutputEnumClasses( XmlDocument xmlSchemaDoc, XmlDocument xmlDataDoc )
+    {
+        XmlElement schemaRoot = xmlSchemaDoc.DocumentElement;
+        XmlElement dataRoot = xmlDataDoc.DocumentElement;
+        foreach( XmlElement enumTableElement in dataRoot.SelectNodes( "/Database/EnumTables/EnumTable" ) )
+        {
+            var tableName = enumTableElement.Attributes["Name"].Value;
+            XmlNodeList foreignKeys = schemaRoot.SelectNodes( "//Table/ForeignKeys/ForeignKey[@ReferencedTable='" + tableName+ "']" );
+            var fileName = OutputEnumClassFile( enumTableElement, foreignKeys ) + ".MooD4L.cs";
             var enumPathFile = SaveOutput( 
-				Path.Combine( Path.GetDirectoryName(Host.TemplateFile), 
-					Path.Combine( DTOOutputPath, fileName ) ) );
-            AddFileToProject( enumPathFile );			
-		}
-	}
-	
-	/// <summary>This method writes one Enum file.
-	/// </summary>
-	/// <param name="enumTableElement"></param>
-	/// <param name="foreignKeys"></param>
-	/// <returns>The enum name.</returns>
-	private string OutputEnumClassFile( XmlElement enumTableElement, XmlNodeList foreignKeys )
-	{
-		string tableName = enumTableElement.Attributes["Name"].Value;
-		string idColumnName = enumTableElement.Attributes["IDColumnName"].Value;
-		string nameColumnName = enumTableElement.Attributes["NameColumnName"].Value;
-		Out_Header();
+                Path.Combine( Path.GetDirectoryName(Host.TemplateFile), 
+                    Path.Combine( DTOOutputPath, fileName ) ) );
+            AddFileToProject( enumPathFile );           
+        }
+    }
+    
+    /// <summary>This method writes one Enum file.
+    /// </summary>
+    /// <param name="enumTableElement"></param>
+    /// <param name="foreignKeys"></param>
+    /// <returns>The enum name.</returns>
+    private string OutputEnumClassFile( XmlElement enumTableElement, XmlNodeList foreignKeys )
+    {
+        string tableName = enumTableElement.Attributes["Name"].Value;
+        string idColumnName = enumTableElement.Attributes["IDColumnName"].Value;
+        string nameColumnName = enumTableElement.Attributes["NameColumnName"].Value;
+        Out_Header();
         Out("");
         Out("using System;");
         Out("using System.ComponentModel.DataAnnotations;");
         Out("");
         Out( CreateNamespaceSignature( DTONameSpaceName, enumTableElement, UseSchemaForNamespace ) );
         Out( "{" );
-	    PushIndent("\t");
-			var fkList = ToList( foreignKeys );
-			var rowElements = enumTableElement.SelectNodes( "Rows/Row");
-			Out_XmlComment( 
-				"This enum contains the rows of table " + tableName + Environment.NewLine +
-				"and the columns are " + idColumnName + " and " + nameColumnName + "." + Environment.NewLine + 
-				"It is used through foreign key(s) " + string.Join( ", ", fkList.Select( fk => fk.Attributes["Name"].Value ) ) + "." + Environment.NewLine +
-				"by table(s) " + string.Join( ", ", fkList.Select( fk => fk.ParentNode.ParentNode.Attributes["Name"].Value ) ) + "."  +
-				( rowElements.Count == 0 ?
-					Environment.NewLine + "There are no rows in table " + tableName + ". Is it correct?" :
-					"" )
-			);
-			Out( "public enum " + CreateEnumTableName( tableName ) );
-			Out( "{ // Template code {48B4D330-4AF6-4266-8453-14CF55F82D47}." );
-	    	PushIndent("\t");
-				Out( "" );
-				var enumStringList = new List<string>();
-				foreach( XmlElement rowElement in rowElements )
-				{
-					var enumValue = rowElement.Attributes["ID"].Value;
-					var enumDescription =
-						null == rowElement.Attributes["Description"] ?
-							null :
-							rowElement.Attributes["Description"].Value;
-					enumStringList.Add(
-						CreateXmlSummary( 
-							"Value is " + enumValue + 
-							( null == enumDescription ?
-								"." :
-								Environment.NewLine + "and the description is \"" + enumDescription + "\"." )
-						) +
-						Environment.NewLine + 
-						rowElement.Attributes["Name"].Value + " = " + enumValue
-					);
-				}
-				Out( string.Join( "," + Environment.NewLine, enumStringList ) );
-			PopIndent();
-			Out( "}" );
-		PopIndent();
-		Out( "}" );
-		return CreateEnumTableName( tableName );
-	}
-	
+        PushIndent("\t");
+            var fkList = ToList( foreignKeys );
+            var rowElements = enumTableElement.SelectNodes( "Rows/Row");
+            Out_XmlComment( 
+                "This enum contains the rows of table " + tableName + Environment.NewLine +
+                "and the columns are " + idColumnName + " and " + nameColumnName + "." + Environment.NewLine + 
+                "It is used through foreign key(s) " + string.Join( ", ", fkList.Select( fk => fk.Attributes["Name"].Value ) ) + "." + Environment.NewLine +
+                "by table(s) " + string.Join( ", ", fkList.Select( fk => fk.ParentNode.ParentNode.Attributes["Name"].Value ) ) + "."  +
+                ( rowElements.Count == 0 ?
+                    Environment.NewLine + "There are no rows in table " + tableName + ". Is it correct?" :
+                    "" )
+            );
+            Out( "public enum " + CreateEnumTableName( tableName ) );
+            Out( "{ // Template code {48B4D330-4AF6-4266-8453-14CF55F82D47}." );
+            PushIndent("\t");
+                Out( "" );
+                var enumStringList = new List<string>();
+                foreach( XmlElement rowElement in rowElements )
+                {
+                    var enumValue = rowElement.Attributes["ID"].Value;
+                    var enumDescription =
+                        null == rowElement.Attributes["Description"] ?
+                            null :
+                            rowElement.Attributes["Description"].Value;
+                    enumStringList.Add(
+                        CreateXmlSummary( 
+                            "Value is " + enumValue + 
+                            ( null == enumDescription ?
+                                "." :
+                                Environment.NewLine + "and the description is \"" + enumDescription + "\"." )
+                        ) +
+                        Environment.NewLine + 
+                        rowElement.Attributes["Name"].Value + " = " + enumValue
+                    );
+                }
+                Out( string.Join( "," + Environment.NewLine, enumStringList ) );
+            PopIndent();
+            Out( "}" );
+        PopIndent();
+        Out( "}" );
+        return CreateEnumTableName( tableName );
+    }
+    
     /// <summary>This method writes all Surface files.
     /// </summary>
     /// <param name="namespaceName"></param>
@@ -1393,18 +1393,18 @@
         Out("}");
         return string.Format( SurfaceFileNameFormat, tableName );
     }
-	
-	/// <summary>This method writes chosen parts of the chosen database's data to an XML file.
-	/// </summary>
-	/// <param name="xmlSchemaPathFile"></param>
-	/// <param name="conn"></param>
-	private void OutputXmlData( string xmlSchemaPathFile,  SqlConnection conn )
-	{
-		var schemaDoc = ReadXmlFile( xmlSchemaPathFile );
-		XmlElement schemaRoot = schemaDoc.DocumentElement;
-		
-		var doc = new XmlDocument();
-		
+    
+    /// <summary>This method writes chosen parts of the chosen database's data to an XML file.
+    /// </summary>
+    /// <param name="xmlSchemaPathFile"></param>
+    /// <param name="conn"></param>
+    private void OutputXmlData( string xmlSchemaPathFile,  SqlConnection conn )
+    {
+        var schemaDoc = ReadXmlFile( xmlSchemaPathFile );
+        XmlElement schemaRoot = schemaDoc.DocumentElement;
+        
+        var doc = new XmlDocument();
+        
         // Important to set the ProcessingInstruction through code, otherwise we will have no
         // DocumentElement to use. (so we do a doc.appendChild and then we suddenly
         // have 2 roots)
@@ -1418,92 +1418,92 @@
         InsertCommentBefore( databaseRoot, "Read more at https://github.com/LosManos/MooDAL/" );
 
         AppendAttribute( databaseRoot, "Name", 
-			schemaRoot.Attributes["Name"].Value );	
+            schemaRoot.Attributes["Name"].Value );  
 
-		var enumTableNodes = schemaRoot.SelectNodes( "/Database/Tables/Table[@IsEnum='True']" );
-		if( enumTableNodes.Count >= 1 )
-		{
-			var enumTablesElement = AppendChildElement( databaseRoot, "EnumTables" );
-			foreach( XmlElement tableNode in enumTableNodes )
-			{
-				var enumTableElement = AppendChildElement( enumTablesElement, "EnumTable" );
-				AppendAttribute( enumTableElement, "Name", tableNode.Attributes["Name"].Value );
-				AppendAttribute( enumTableElement, "Schema", tableNode.Attributes["Schema"].Value );
-			}
-		}
-		
-		//	We now have an XML document with an outline.
-		//	Now fill that outline with data from the database.
-		
-		foreach( XmlElement tableElement in databaseRoot.SelectNodes( "/Database/EnumTables/EnumTable" ) )
-		{
-			var tableName = tableElement.Attributes["Name"].Value;
+        var enumTableNodes = schemaRoot.SelectNodes( "/Database/Tables/Table[@IsEnum='True']" );
+        if( enumTableNodes.Count >= 1 )
+        {
+            var enumTablesElement = AppendChildElement( databaseRoot, "EnumTables" );
+            foreach( XmlElement tableNode in enumTableNodes )
+            {
+                var enumTableElement = AppendChildElement( enumTablesElement, "EnumTable" );
+                AppendAttribute( enumTableElement, "Name", tableNode.Attributes["Name"].Value );
+                AppendAttribute( enumTableElement, "Schema", tableNode.Attributes["Schema"].Value );
+            }
+        }
+        
+        //  We now have an XML document with an outline.
+        //  Now fill that outline with data from the database.
+        
+        foreach( XmlElement tableElement in databaseRoot.SelectNodes( "/Database/EnumTables/EnumTable" ) )
+        {
+            var tableName = tableElement.Attributes["Name"].Value;
 
-			var pkColumnName = EnumTableColumnsByTableName( tableName ).Item1;
-			var nameColumnName = EnumTableColumnsByTableName( tableName ).Item2;
-			var descriptionColumnName = EnumTableColumnsByTableName( tableName ).Item3;
-				
-			AppendAttribute( tableElement, "IDColumnName", pkColumnName );
-			AppendAttribute( tableElement, "NameColumnName", nameColumnName );
-			if( null != descriptionColumnName )
-			{
-				AppendAttribute( tableElement, "DescriptionColumnName", descriptionColumnName );
-			}
+            var pkColumnName = EnumTableColumnsByTableName( tableName ).Item1;
+            var nameColumnName = EnumTableColumnsByTableName( tableName ).Item2;
+            var descriptionColumnName = EnumTableColumnsByTableName( tableName ).Item3;
+                
+            AppendAttribute( tableElement, "IDColumnName", pkColumnName );
+            AppendAttribute( tableElement, "NameColumnName", nameColumnName );
+            if( null != descriptionColumnName )
+            {
+                AppendAttribute( tableElement, "DescriptionColumnName", descriptionColumnName );
+            }
 
-			var cmd = new SqlCommand( 
-				string.Format( "select * from {0}", tableName ), 
-				conn );
-			var recordCount = 0;
-			XmlElement rowsElement = null;
-			using( var reader = cmd.ExecuteReader() )
-			{
-				while( reader.Read() )
-				{
-					rowsElement = rowsElement ?? AppendChildElement( tableElement, "Rows" );
-					++recordCount;
-					var rowElement = AppendChildElement( rowsElement, "Row" );
-					AppendAttribute( rowElement, "ID", reader[ pkColumnName ].ToString() );
-					AppendAttribute( rowElement, "Name", reader[ nameColumnName ].ToString() );
-					if( null != descriptionColumnName )
-					{
-						AppendAttribute( rowElement, "Description", reader[ descriptionColumnName ].ToString() );
-					}
-				}
-			}
-			AppendAttribute( tableElement, "RecordCount", recordCount );
-			if( 0 == recordCount )
-			{
-				InsertCommentBefore( tableElement, "The table has no rows.  Is this correct?" );
-			}
-		}
-		
+            var cmd = new SqlCommand( 
+                string.Format( "select * from {0}", tableName ), 
+                conn );
+            var recordCount = 0;
+            XmlElement rowsElement = null;
+            using( var reader = cmd.ExecuteReader() )
+            {
+                while( reader.Read() )
+                {
+                    rowsElement = rowsElement ?? AppendChildElement( tableElement, "Rows" );
+                    ++recordCount;
+                    var rowElement = AppendChildElement( rowsElement, "Row" );
+                    AppendAttribute( rowElement, "ID", reader[ pkColumnName ].ToString() );
+                    AppendAttribute( rowElement, "Name", reader[ nameColumnName ].ToString() );
+                    if( null != descriptionColumnName )
+                    {
+                        AppendAttribute( rowElement, "Description", reader[ descriptionColumnName ].ToString() );
+                    }
+                }
+            }
+            AppendAttribute( tableElement, "RecordCount", recordCount );
+            if( 0 == recordCount )
+            {
+                InsertCommentBefore( tableElement, "The table has no rows.  Is this correct?" );
+            }
+        }
+        
         Out( FormatXml( doc ) );
-	}
-	
-	/// <summary>This method takes a string and puts in inside summary tags.
-	/// It is used for createing XML comments.
-	/// There is a method Out_XmlComment that doesn't use this method.  Should it?
-	/// </summary>
-	/// <param name="comment"></param>
-	/// <returns></returns>
-	private static string CreateXmlSummary( string comment )
-	{
-		var lineList = new List<string>();
+    }
+    
+    /// <summary>This method takes a string and puts in inside summary tags.
+    /// It is used for createing XML comments.
+    /// There is a method Out_XmlComment that doesn't use this method.  Should it?
+    /// </summary>
+    /// <param name="comment"></param>
+    /// <returns></returns>
+    private static string CreateXmlSummary( string comment )
+    {
+        var lineList = new List<string>();
         foreach( string line in comment.Split(new string[] { Environment.NewLine }, StringSplitOptions.None) )
-		{
-			lineList.Add( line );
-		}
-		lineList[0] = "<summary>" + lineList[0];
-		lineList.Add( "</summary>" );
-		return string.Join( Environment.NewLine, lineList.Select( s => "/// " + s ) );
-	}
-	
-	/// <summary>This method writes chosen parts of the database's schema to a file.
+        {
+            lineList.Add( line );
+        }
+        lineList[0] = "<summary>" + lineList[0];
+        lineList.Add( "</summary>" );
+        return string.Join( Environment.NewLine, lineList.Select( s => "/// " + s ) );
+    }
+    
+    /// <summary>This method writes chosen parts of the database's schema to a file.
     /// </summary>
     /// <param name="database"></param>
     private void OutputXmlSchema( Database database )
     {
-		//	The Microsoft.SqlServer.Management.Smo namespace:
+        //  The Microsoft.SqlServer.Management.Smo namespace:
         //  http://msdn.microsoft.com/en-us/library/microsoft.sqlserver.management.smo.aspx
 
         var doc = new XmlDocument();
@@ -1513,7 +1513,7 @@
         // have 2 roots)
         doc.AppendChild(doc.CreateProcessingInstruction("xml", "version=\"1.0\" encoding=\"UTF-8\""));
 
-		//	<Database>
+        //  <Database>
         var elem = doc.CreateElement( "Database" );
         doc.AppendChild( elem );
         var databaseRoot = doc.DocumentElement;
@@ -1523,27 +1523,27 @@
 
         AppendAttribute( databaseRoot, "Name", database.Name );
         
-		//	<Database><Tables>
+        //  <Database><Tables>
         var tablesElement = AppendChildElement( databaseRoot, "Tables" );
 
         foreach( Table table in database.Tables )
         {
-			//	<Database><Tables><Table>
+            //  <Database><Tables><Table>
             var tableElement = AppendChildElement( tablesElement, "Table" );
             AppendAttribute( tableElement, "Name", table.Name );
             AppendAttribute( tableElement, "Include", IsClassOkToGenerate( table ) );
             AppendAttribute( tableElement, "Schema", table.Schema );
-			AppendAttribute( tableElement, "IsEnum", IsEnumTable( table.Name ) );
+            AppendAttribute( tableElement, "IsEnum", IsEnumTable( table.Name ) );
             InsertCommentBefore( tableElement, "Name is the tablename, " + 
                 "Include is if the table should be included (all tables are in the schema but not all should become code, " +
                 "and Schema is the schema the table is in." );
 
-			//	<Database><Tables><Table><Columns>
+            //  <Database><Tables><Table><Columns>
             var columnsElement = AppendChildElement( tableElement, "Columns" );
 
             foreach( Column column in table.Columns )
             {
-				//	<Database><Tables><Table><Columns><Column>
+                //  <Database><Tables><Table><Columns><Column>
                 var columnElement = AppendChildElement( columnsElement, "Column" );
                 AppendAttribute( columnElement, "Name", column.Name );
                 AppendAttribute( columnElement, "IsNullable", column.Nullable );
@@ -1560,12 +1560,12 @@
                 //  http://msdn.microsoft.com/en-us/library/microsoft.sqlserver.management.smo.foreignkey.aspx
                 if( column.EnumForeignKeys().Rows.Count >= 1 )
                 {
-					//	<Database><Tables><Table><Columns><Column><ForeignKeys>
+                    //  <Database><Tables><Table><Columns><Column><ForeignKeys>
                     var columnForeignKeysElement = AppendChildElement( columnElement, "ForeignKeys" );
 
                     foreach( System.Data.DataRow row in column.EnumForeignKeys().Rows )
                     {
-						//	<Database><Tables><Table><Columns><Column><ForeignKeys><ForeignKey>
+                        //  <Database><Tables><Table><Columns><Column><ForeignKeys><ForeignKey>
                         var columnForeignKeyElement = AppendChildElement( columnForeignKeysElement, "ForeignKey" );
                         AppendAttribute( columnForeignKeyElement, "Schema", row[0].ToString() );
                         AppendAttribute( columnForeignKeyElement, "ColumName", row[1].ToString() );
@@ -1576,23 +1576,23 @@
 
             if( table.ForeignKeys.Count >= 1 )
             {   
-				//	<Database><Tables><Table><ForeignKeys>
+                //  <Database><Tables><Table><ForeignKeys>
                 var tableForeignKeysElement = AppendChildElement( tableElement, "ForeignKeys" );
                 foreach( ForeignKey foreignKey in table.ForeignKeys )
                 {
-				//	<Database><Tables><Table><ForeignKeys><ForeignKey>
+                //  <Database><Tables><Table><ForeignKeys><ForeignKey>
                     var foreignKeyElement = AppendChildElement( tableForeignKeysElement, "ForeignKey" );
                     AppendAttribute( foreignKeyElement, "Name", foreignKey.Name );
                     AppendAttribute( foreignKeyElement, "ReferencedKey", foreignKey.ReferencedKey );
                     AppendAttribute( foreignKeyElement, "ReferencedTable", foreignKey.ReferencedTable );
                     InsertCommentBefore( foreignKeyElement, "The ForeignKey Name is the name of the FK.  ReferencedKey is the name of the index on the \"other\" side." );
 
-					//	<Database><Tables><Table><ForeignKeys><ForeignKey><Columns>
+                    //  <Database><Tables><Table><ForeignKeys><ForeignKey><Columns>
                     var foreignKeyColumnsElement = AppendChildElement( foreignKeyElement, "Columns" );
                     foreach( ForeignKeyColumn column in foreignKey.Columns )
                     {   
-						//	<Database><Tables><Table><ForeignKeys><ForeignKey><Columns><Column>
-	                    // http://msdn.microsoft.com/en-us/library/microsoft.sqlserver.management.smo.foreignkeycolumn.aspx
+                        //  <Database><Tables><Table><ForeignKeys><ForeignKey><Columns><Column>
+                        // http://msdn.microsoft.com/en-us/library/microsoft.sqlserver.management.smo.foreignkeycolumn.aspx
                         var foreignKeyColumnElement = AppendChildElement( foreignKeyColumnsElement, "Column" );
                         AppendAttribute( foreignKeyColumnElement, "Name", column.Name );
                         AppendAttribute( foreignKeyColumnElement, "ReferencedColumn", column.ReferencedColumn );
@@ -1603,15 +1603,15 @@
 
             if( table.Indexes.Count >= 1 )
             {
-				//	<Database><Tables><Table><Indexes>
+                //  <Database><Tables><Table><Indexes>
                 var indexesElement = AppendChildElement( tableElement, "Indexes" );
                 foreach( Index index in table.Indexes )
                 {
                     //  http://msdn.microsoft.com/en-us/library/microsoft.sqlserver.management.smo.index.aspx
-					//	<Database><Tables><Table><Indexes><Index>
+                    //  <Database><Tables><Table><Indexes><Index>
                     var indexElement = AppendChildElement( indexesElement, "Index" );
                     AppendAttribute( indexElement, "Name", index.Name );
-					AppendAttribute( indexElement, "IsUnique", index.IsUnique );
+                    AppendAttribute( indexElement, "IsUnique", index.IsUnique );
                     //  http://msdn.microsoft.com/en-us/library/microsoft.sqlserver.management.smo.indexkeytype.aspx
                     AppendAttribute( indexElement, "IndexType", 
                         index.IndexKeyType == IndexKeyType.None ? "NotUnique" :
@@ -1619,7 +1619,7 @@
                         index.IndexKeyType == IndexKeyType.DriUniqueKey ? "Unique" :
                         "Unknown - Error in script"
                     );
-				//	<Database><Tables><Table><Indexes><Index><Columns>
+                //  <Database><Tables><Table><Indexes><Index><Columns>
                     var indexColumnsElement = AppendChildElement( indexElement, "Columns" );
                     foreach( IndexedColumn column in index.IndexedColumns )
                     {
@@ -1634,29 +1634,29 @@
 
         Out( FormatXml( doc ) );
     }
-	
-	/// <summary>This method writes a comment with C# style double slashes.
-	/// </summary>
-	/// <param name="stuff"></param>
-	private void Out_Comment( string stuff )
-	{
+    
+    /// <summary>This method writes a comment with C# style double slashes.
+    /// </summary>
+    /// <param name="stuff"></param>
+    private void Out_Comment( string stuff )
+    {
         foreach( string line in stuff.Split(new string[] { Environment.NewLine }, StringSplitOptions.None) )
-		{
-			Out( "//\t" + line );
-		}
-	}
-	
-	/// <summary>This method writes the header that should be in every file.
-	/// </summary>
-	private void Out_Header()
-	{
+        {
+            Out( "//\t" + line );
+        }
+    }
+    
+    /// <summary>This method writes the header that should be in every file.
+    /// </summary>
+    private void Out_Header()
+    {
         Out("// This class is automatically generated by MooDAL {0}.", System.DateTime.Now.ToString("u"));
         Out("// Read more at https://github.com/LosManos/MooD4L/");
-	}
+    }
 
     /// <summary>This method writes a create method for a table and index/foreign key.
     /// </summary>
-    /// <param name="tableName"></param>
+    /// <param name="tableName">Could be inferred from tableElement.</param>
     /// <param name="schemaName"></param>
     /// <param name="tableElement"></param>
     /// <param name="columnList"></param>
@@ -1673,7 +1673,10 @@
         );
 
         // TODO: Move method signature creator to a method of its own.
-        Out_Text( "public int Insert( {0} )", 
+        Out_Text( "public {0} Insert( {1} )", 
+            ReturnObjectWhenInsert ?
+                "IEnumerable<" + CreateDTOClassDeclarationType( tableElement ) + ">" :
+                "int", //   "int" should really be the type of the PK.
             CreateMethodParameterListString( columnList )
         );
         
@@ -1685,13 +1688,14 @@
                     {1},
                     transaction: ctx.Trans
                 );
-                var res = ctx.Conn.Query<int>(
+                var res = ctx.Conn.Query<{4}>(
                     {2},
                     transaction: ctx.Trans
                 );
-                return (int)res.Single();
+                return {3}
             }}"
         , 
+            //  {0}
             "\"insert into " + 
                 ( UseSchemaForNamespace ?
                     schemaName + "." :
@@ -1700,8 +1704,18 @@
                 tableName +
                 " ( " + CreateQueryInsertParameterListString( columnList ) + " )" +
                 " values( " + CreateQueryInsertParameterListStringWithAtSign( columnList ) + " )\"",
+            //  {1}
             "new { " + CreateObjectAssignmentParameterListString( columnList ) + "}", 
-            "\"select cast( @@identity as int)\""
+            //  {2}
+            "\"select cast( @@identity as int)\"", 
+            //  {3}
+            ReturnObjectWhenInsert ?
+                "res;" :
+                "(int)res.Single();", 
+            //  {4]
+            ReturnObjectWhenInsert ?
+                CreateDTOClassDeclarationType( tableElement ) :
+                "int"
         );
         Out( "" );
     }
@@ -1749,12 +1763,12 @@
         Out_XmlComment( "This method deletes all records in the " + tableName + " table." );
         Out_Text( @"
             public void DeleteAll()
-            {{
-                using( var conn = CreateConnection() )
-                {{
-                    conn.Open();
-                    conn.Execute( {0} );
-                }}
+            {{    //    Template code {{528B6335-7A34-41E8-92D6-47500BF47C14}}
+                var ctx = MakeConnectionAndTransaction();
+                ctx.Conn.Execute( 
+                    {0}, 
+                    transaction : ctx.Trans
+                );
             }}", 
             "\"delete from " + 
             ( UseSchemaForNamespace ?
@@ -1813,19 +1827,22 @@
                  "By" + string.Join( "And", columnsUsedInIxFk.Select( c => c.Attributes["Name"].Value ) ), 
             CreateMethodParameterListString( columnsUsedInIxFk )
             );
-        Out("{");
+        Out("{    //    Template code {F054A618-9B24-4ACF-8360-D59D198D5411}");
         PushIndent("\t");
             Out_Text( @"
                 var ctx = MakeConnectionAndTransaction();
-                ctx.Conn.Open();
+                //    ctx.Conn.Open();
                 ctx.Conn.Execute( 
                     {0}, 
-                    {1} );", 
+                    {1}, 
+                    transaction : ctx.Trans );", 
+                // 0:		
                 string.Format( 
                     "\"delete from {0} where {1}\"", 
                     formattedTableName, 
                     CreateQuerySelectEqualParameterListString( columnsUsedInIxFk )
                 ), 
+			    // 1:
                 string.Format( 
                     "new {{ {0} }}", 
                     CreateObjectAssignmentParameterListString( columnsUsedInIxFk ) )
@@ -1888,14 +1905,14 @@
     /// <param name="schemaName"></param>
     /// <param name="indexName"></param>
     /// <param name="isPrimaryKey"></param>
-	/// <param name="indexIsPrimaryKey"></param>
+    /// <param name="indexIsPrimaryKey"></param>
     /// <param name="columnsUsedInIxFk"></param>
     private void Out_SurfaceRetrieveMethod( 
         string tableName, 
         string schemaName, 
         string indexName, 
-		bool indexIsPrimaryKey, 
-		bool isUnique, 
+        bool indexIsPrimaryKey, 
+        bool isUnique, 
         IEnumerable<XmlNode> columnsUsedInIxFk
     )
     {
@@ -2050,11 +2067,11 @@
                 //XmlAttribute indexTypeAttribute = indexElement.Attributes["IndexType"];
                 bool isPrimaryKey = 
                     usedColumns.All( c => bool.Parse( c.Attributes["IsPrimaryKey"].Value ) );
-				XmlAttribute isUniqueAttribute = indexElement.Attributes["IsUnique"];
-				bool isUnique = 
-					( null  == isUniqueAttribute ?
-						false :
-						bool.Parse( isUniqueAttribute.Value ) );
+                XmlAttribute isUniqueAttribute = indexElement.Attributes["IsUnique"];
+                bool isUnique = 
+                    ( null  == isUniqueAttribute ?
+                        false :
+                        bool.Parse( isUniqueAttribute.Value ) );
                 string indexName = indexElement.Attributes["Name"].Value;
 
                 Out_SurfaceRetrieveMethod( 
@@ -2064,7 +2081,7 @@
                         null, 
                     indexName, 
                     isPrimaryKey, 
-					isUnique, 
+                    isUnique, 
                     usedColumns );
                 Out( "" );
             }
@@ -2076,79 +2093,79 @@
     /// <param name="tableName"></param>
     /// <param name="tableElement"></param>
     /// <param name="columnList"></param>
-	/// <param name="byColumns">Set to true if the resulting outputed method should take each column as parameter.
-	/// Set to false to make it take an object as parameter.</param>
+    /// <param name="byColumns">Set to true if the resulting outputed method should take each column as parameter.
+    /// Set to false to make it take an object as parameter.</param>
     private void Out_SurfaceUpdateMethod(
         string tableName, 
         XmlElement tableElement, 
         IEnumerable<XmlElement> columnList, 
-		bool byColumns)
+        bool byColumns)
     {
         // TODO: Make it possible to set setting for reading the record after writing it. Issue #4.
         
-		if( byColumns ){
-			//	Create a method that takes all table columns as parameters.
-	        Out_XmlComment(
-	            "This method updates every field in the " + tableName + " table.", 
-	            columnList.Select( c => c.Attributes["Name"].Value )
-	        );
+        if( byColumns ){
+            //  Create a method that takes all table columns as parameters.
+            Out_XmlComment(
+                "This method updates every field in the " + tableName + " table.", 
+                columnList.Select( c => c.Attributes["Name"].Value )
+            );
 
-	        // TODO: Move method signature creator to a method of its own.
-	        Out( "public void Update( {0} )", 
-	            CreateMethodParameterListString( columnList )
-	        );
-	        Out( "{" );
-	        PushIndent( "\t" );
-	            Out_Text( @"
-	                var ctx = MakeConnectionAndTransaction();
-	                ctx.Conn.Execute(
-	                    {0},
-	                    {1}, 
-	                    transaction : ctx.Trans);", 
-	                string.Format( 
-	                    "\"update {1}{2} set {3} where {4}\"", 
-	                    Environment.NewLine, 
-	                    UseSchemaForNamespace ?
-	                        tableElement.Attributes[ "Schema" ].Value + "." :
-	                        "", 
-	                    tableName, 
-	                    CreateQueryUpdateAssignment( 
-	                        columnList.Where( c => false  == bool.Parse( c.Attributes["IsPrimaryKey"].Value ) ) ), 
-	                    CreateQuerySelectEqualParameterListString( 
-	                        columnList.Where( c => true  == bool.Parse( c.Attributes["IsPrimaryKey"].Value ) ) )
-	                    ), 
-	                string.Format( 
-	                    "new {{ {0} }}", 
-	                    CreateObjectAssignmentParameterListString( columnList ) )
-	             );
-	        PopIndent();
-	        Out( "}" );
-		}else{
-			//	Create a method that takes an object as parameter.
-	        Out_XmlComment(
-	            "This method updates every field in the " + tableName + " table.", 
-	            tableName
-	        );
-	        // TODO: Move method signature creator to a method of its own.
-	        Out( "public void Update( {0} )", 
-	            CreateMethodParameter( 
-					CreateDTOClassDeclarationType( tableElement ), 
-					tableName )
-	        );
-	        Out( "{" );
-	        PushIndent( "\t" );
-				Out( "Update( " );
-		        PushIndent( "\t" );
-					Out( CreateQueryInsertParameterListString( tableName + ".", columnList, null ) );
-		        PopIndent();
-				Out( ");" );
-	        PopIndent();
-	        Out( "}" );
-		}
+            // TODO: Move method signature creator to a method of its own.
+            Out( "public void Update( {0} )", 
+                CreateMethodParameterListString( columnList )
+            );
+            Out( "{" );
+            PushIndent( "\t" );
+                Out_Text( @"
+                    var ctx = MakeConnectionAndTransaction();
+                    ctx.Conn.Execute(
+                        {0},
+                        {1}, 
+                        transaction : ctx.Trans);", 
+                    string.Format( 
+                        "\"update {1}{2} set {3} where {4}\"", 
+                        Environment.NewLine, 
+                        UseSchemaForNamespace ?
+                            tableElement.Attributes[ "Schema" ].Value + "." :
+                            "", 
+                        tableName, 
+                        CreateQueryUpdateAssignment( 
+                            columnList.Where( c => false  == bool.Parse( c.Attributes["IsPrimaryKey"].Value ) ) ), 
+                        CreateQuerySelectEqualParameterListString( 
+                            columnList.Where( c => true  == bool.Parse( c.Attributes["IsPrimaryKey"].Value ) ) )
+                        ), 
+                    string.Format( 
+                        "new {{ {0} }}", 
+                        CreateObjectAssignmentParameterListString( columnList ) )
+                 );
+            PopIndent();
+            Out( "}" );
+        }else{
+            //  Create a method that takes an object as parameter.
+            Out_XmlComment(
+                "This method updates every field in the " + tableName + " table.", 
+                tableName
+            );
+            // TODO: Move method signature creator to a method of its own.
+            Out( "public void Update( {0} )", 
+                CreateMethodParameter( 
+                    CreateDTOClassDeclarationType( tableElement ), 
+                    tableName )
+            );
+            Out( "{" );
+            PushIndent( "\t" );
+                Out( "Update( " );
+                PushIndent( "\t" );
+                    Out( CreateQueryInsertParameterListString( tableName + ".", columnList, null ) );
+                PopIndent();
+                Out( ");" );
+            PopIndent();
+            Out( "}" );
+        }
         Out( "" );
     }
 
-	    /// <summary>This methods writes all update methods for a table.
+        /// <summary>This methods writes all update methods for a table.
     /// It is just a pass through method.  Feel free to remove; it is a remains.
     /// </summary>
     /// <param name="tableName"></param>
@@ -2161,22 +2178,22 @@
     {
         Out_SurfaceUpdateMethod( tableName, tableElement, columnList, byColumns : false );
 
-		Out_SurfaceUpdateMethod( tableName, tableElement, columnList, byColumns : true );
+        Out_SurfaceUpdateMethod( tableName, tableElement, columnList, byColumns : true );
     }
 
-	/// <summary>This method reads an XML file and returns the xml document.
-	/// </summary>
-	/// <param name="pathFile"></param>
-	/// <returns></returns>
-	private XmlDocument ReadXmlFile( string pathFile )
-	{
+    /// <summary>This method reads an XML file and returns the xml document.
+    /// </summary>
+    /// <param name="pathFile"></param>
+    /// <returns></returns>
+    private XmlDocument ReadXmlFile( string pathFile )
+    {
         var textReader = new XmlTextReader( pathFile );
         var xmldoc = new XmlDocument();
         xmldoc.Load( textReader );
         textReader.Close();
-		return xmldoc;
-	}
-	
+        return xmldoc;
+    }
+    
     /// <summary>This method takes the buffer and saves it as a file.
     /// </summary>
     /// <param name="outputFileName"></param>
