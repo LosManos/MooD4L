@@ -227,6 +227,30 @@
         }
     }
     
+    /// <summary>This method washes the DateTime so it fits in Sqlserver which has
+    /// a different min- and max-value for datetime.
+    /// </summary>
+    /// <param name="columnList"></param>
+    /// <returns></returns>
+    private string CreateDateTimeMinMaxWash( IEnumerable<XmlElement> columnList )
+    {
+        var ret = new List<string>();
+        
+        var datetimeColumnList = columnList.Where( c => c.Attributes["DbType"].Value == "datetime" );
+        
+        //  Only comment if there is code generated.
+        if( datetimeColumnList.Count() >= 1 )
+        {
+            ret.Add( "//    http://www.selfelected.com/convert-dotnet-datetime-to-sqlserver-sqldatetime/" );
+        }
+        foreach( XmlElement column in datetimeColumnList )
+        {
+            var parameterName = column.Attributes["Name"].Value;
+            ret.Add( parameterName + " = MakeValidForSqlserver( " + parameterName + " );" );
+        }
+        return string.Join( Environment.NewLine, ret );
+    }
+    
     /// <summary>This method returns a DTO class declaration.
     /// Us it for creating ... DTO class declarations!
     /// I.e.: DTO.Customer Customer
@@ -1002,7 +1026,7 @@
         }
 
         // First find the amount of indentation the first line of the source text has.  We must
-        // remove this indentation from every row before outputting.
+        // remove this indentation from every row before outputting.;
         //    We must also decide if there are leading tabs or spaces.  We prefer spacex4 in 
         //    this file but sometimes a tab creeps in.
         var charIndentCount = stuffList.First().ToCharArray().TakeWhile( c => c == ' ' ).Count();
@@ -1011,14 +1035,16 @@
         
         foreach( string t in stuffList )
         {
-            if( t.Length >= indentCount )
+            var s = t;
+            if( s.TakeWhile( c => char.IsWhiteSpace(c) ).Count() >= indentCount )
             {
-                Out( t.Remove( 0, indentCount ) );
+				//	Make sure we don't delete characters, only whitespace.
+            	s = 
+					char.IsWhiteSpace( s[0] ) ?
+					s.Remove( 0, indentCount ) :
+					s; 
             }
-            else
-            {
-                Out( t );
-            }
+            Out( s );
         }
     }
 
@@ -1682,16 +1708,27 @@
         
         Out_Text( @"
             {{    // Template code {{A4830D85-3274-4D81-B3DE-55E7773AE8BE}}.
+
+                //  Wash parameters of the System.DateTime type parameters so they fit in SqlServer.
+                {5}
+
+                //    Reuse a connection if possible.  Create if necessary.  Open connection if necessary.
                 var ctx = MakeConnectionAndTransaction();
+
+                //  Shoot.
                 ctx.Conn.Execute( 
                     {0}, 
                     {1},
                     transaction: ctx.Trans
                 );
+
+                //  Select the newly updated record.
                 var res = ctx.Conn.Query<{4}>(
                     {2},
                     transaction: ctx.Trans
                 );
+
+                //  Return the newly updated record.  We know there must be one and only one.
                 return {3}
             }}"
         , 
@@ -1712,10 +1749,12 @@
             ReturnObjectWhenInsert ?
                 "res;" :
                 "(int)res.Single();", 
-            //  {4]
+            //  {4}
             ReturnObjectWhenInsert ?
                 CreateDTOClassDeclarationType( tableElement ) :
-                "int"
+                "int", 
+             //  {5}
+            CreateDateTimeMinMaxWash( columnList )
         );
         Out( "" );
     }
@@ -1836,13 +1875,13 @@
                     {0}, 
                     {1}, 
                     transaction : ctx.Trans );", 
-                // 0:		
+                // 0:       
                 string.Format( 
                     "\"delete from {0} where {1}\"", 
                     formattedTableName, 
                     CreateQuerySelectEqualParameterListString( columnsUsedInIxFk )
                 ), 
-			    // 1:
+                // 1:
                 string.Format( 
                     "new {{ {0} }}", 
                     CreateObjectAssignmentParameterListString( columnsUsedInIxFk ) )

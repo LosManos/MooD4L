@@ -51,5 +51,34 @@ namespace DataLayer.Surface
         {
             return _factory.MakeConnectionAndOpenAndPossiblyTransaction();
         }
+
+        /// <summary>This method returns the first parameter but makes
+        /// sure it is as min or higher and as max or lower.  Between alltså.
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="value"></param>
+        /// <param name="min"></param>
+        /// <param name="max"></param>
+        /// <returns></returns>
+        protected T Between<T>( T value, T min, T max ) where T:IComparable
+        {
+            return 
+                (-1 == value.CompareTo(min)) ? min :
+                (+1 == value.CompareTo( max)) ? max :
+                value;
+        }
+
+        /// <summary>This method makes a DateTime valid for use in Sqlserver
+        /// by limiting (squeezing) it to Sqlserver datetime bounds.  A dotnet DateTime
+        /// can be earlier and later than a Sqlserver ditto.
+        /// </summary>
+        /// <param name="t"></param>
+        /// <returns></returns>
+        protected DateTime MakeValidForSqlserver( DateTime t ){
+            return Between<DateTime>( t, 
+                (DateTime)System.Data.SqlTypes.SqlDateTime.MinValue, 
+                (DateTime)System.Data.SqlTypes.SqlDateTime.MaxValue
+                );
+        }
     }
 }
