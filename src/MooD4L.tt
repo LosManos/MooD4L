@@ -106,6 +106,10 @@
         { "ntext","string" }
     };
 
+    private struct Const{
+        internal const string ThisMethodIsAutomaticallyGenerated = "This method is automatically generated.";
+    };
+
     /// <summary>This method appends an XML attribute to the element sent as parameter.
     /// The attiribute's name and value are set.
     /// </summary>
@@ -231,8 +235,9 @@
     /// a different min- and max-value for datetime.
     /// </summary>
     /// <param name="columnList"></param>
+    /// <param name="valuePrefix"></param>
     /// <returns></returns>
-    private string CreateDateTimeMinMaxWash( IEnumerable<XmlElement> columnList )
+    private string CreateDateTimeMinMaxWash( IEnumerable<XmlElement> columnList, string valuePrefix = null )
     {
         var ret = new List<string>();
         
@@ -241,13 +246,21 @@
         //  Only comment if there is code generated.
         if( datetimeColumnList.Count() >= 1 )
         {
+            ret.Add( "" );  //  I don't like adding empty lines for formatting inside a method like this but it'll have to do for now. /OF
+            ret.Add( "//    Wash parameters of the System.DateTime type parameters so they fit in SqlServer." );
             ret.Add( "//    http://www.selfelected.com/convert-dotnet-datetime-to-sqlserver-sqldatetime/" );
         }
         foreach( XmlElement column in datetimeColumnList )
         {
-            var parameterName = column.Attributes["Name"].Value;
+            var parameterName =
+                ( null == valuePrefix ?
+                    "" :
+                    valuePrefix + "." 
+                ) +
+                column.Attributes["Name"].Value;
             ret.Add( parameterName + " = MakeValidForSqlserver( " + parameterName + " );" );
         }
+        ret.Add( "" );  //  I don't like adding empty lines for formatting inside a method like this but it'll have to do for now. /OF
         return string.Join( Environment.NewLine, ret );
     }
     
@@ -541,12 +554,21 @@
     /// <summary>This method returns e.g. "CustomerID = CustomerID" for a column.
     /// </summary>
     /// <param name="node"></param>
+    /// <param name="valuePrefix">Set to null or let be for nothing.
+    /// Set to text e.g.: 
+    ///     "newObject"
+    /// for
+    ///     "ID = newObject.ID, Name = newObject.Name"
+    /// </param>
     /// <returns></returns>
-    private static string CreateObjectAssignmentParameter( XmlNode node )
+    private static string CreateObjectAssignmentParameter( XmlNode node, string valuePrefix = null )
     {
         return string.Format( "{0} = {1}", 
+            //  {0}
             node.Attributes["Name"].Value, 
-            node.Attributes["Name"].Value
+            //  {1}
+            ( null == valuePrefix ? "" : valuePrefix + "." ) +
+                node.Attributes["Name"].Value
         );        
     }
 
@@ -554,20 +576,32 @@
     /// [ "CustomerID = CustomerID", "Name = Name" ].
     /// </summary>
     /// <param name="nodeList"></param>
+    /// <param name="valuePrefix">Set to null or let be for nothing.
+    /// Set to text e.g.: 
+    ///     "newObject"
+    /// for
+    ///     "ID = newObject.ID, Name = newObject.Name"
+    /// </param>
     /// <returns></returns>
-    private static IEnumerable<string> CreateObjectAssignmentParameterList( IEnumerable<XmlNode> nodeList )
+    private static IEnumerable<string> CreateObjectAssignmentParameterList( IEnumerable<XmlNode> nodeList, string valuePrefix = null )
     {
-        return nodeList.Select( n => CreateObjectAssignmentParameter( n ) );
+        return nodeList.Select( n => CreateObjectAssignmentParameter( n, valuePrefix ) );
     }
 
     /// <summary>This method takes a list of columns and returns them as e.g.:
     /// "CustomerID = CustomerID, Name = Name".
     /// </summary>
     /// <param name="nodeList"></param>
+    /// <param name="valuePrefix">Set to null or let be for nothing.
+    /// Set to text e.g.: 
+    ///     "newObject"
+    /// for
+    ///     "ID = newObject.ID, Name = newObject.Name"
+    /// </param>
     /// <returns></returns>
-    private static string CreateObjectAssignmentParameterListString( IEnumerable<XmlNode> nodeList )
+    private static string CreateObjectAssignmentParameterListString( IEnumerable<XmlNode> nodeList, string valuePrefix = null )
     {
-        return string.Join( ", ", CreateObjectAssignmentParameterList( nodeList ) );
+        return string.Join( ", ", CreateObjectAssignmentParameterList( nodeList, valuePrefix ) );
     }
 
     /*
@@ -1062,10 +1096,11 @@
     /// </summary>
     /// <param name="summaryText">The summary text.  Line breaks are formatted accordingly.</param>
     /// <param name="parameter">A param line will be written with this parameter's name.</param>
-    /// /// <param name="returnText">Optional. If passed along a returns line will be written.  This has, as of yet, not correctly formatted line breaks.  Feel free to implement.</param>
-    private void Out_XmlComment( string summaryText, string parameter, string returnText = null )
+    /// <param name="returnText">Optional. If passed along a returns line will be written.  This has, as of yet, not correctly formatted line breaks.  Feel free to implement.</param>
+    /// <param name="remarkText">Optional. If not set it will result in text saying the method is automatically created.  Set to null for removing it.
+    private void Out_XmlComment( string summaryText, string parameter, string returnText = null, string remarkText = Const.ThisMethodIsAutomaticallyGenerated )
     {
-        Out_XmlComment( summaryText, new string[]{parameter}, returnText );
+        Out_XmlComment( summaryText, new string[]{parameter}, returnText, remarkText );
     }
     
     /// <summary>This method prints XML comments for a method.
@@ -1073,7 +1108,8 @@
     /// <param name="summaryText">The summary text.  Line breaks are formatted accordingly.</param>
     /// <param name="parameterList">Optional.  If passed along, param lines will be written.</param>
     /// <param name="returnText">Optional. If passed along a returns line will be written.  This has, as of yet, not correctly formatted line breaks.  Feel free to implement.</param>
-    private void Out_XmlComment( string summaryText, IEnumerable<string> parameterList = null, string returnText = null )
+    /// <param name="remarkText">Optional. If not set it will result in text saying the method is automatically created.  Set to null for removing it.
+    private void Out_XmlComment( string summaryText, IEnumerable<string> parameterList = null, string returnText = null, string remarkText = Const.ThisMethodIsAutomaticallyGenerated )
     {
 
         //  Print the Summary part.
@@ -1101,10 +1137,15 @@
         }
 
         //  Print the Returns part.
-        if( returnText != null )
-        {
+        if( returnText != null ){
             // TODO: Create a proper return text split as with Summary.  Issue #2.
             Out( "/// <returns>" + returnText + "</returns>" );
+        }
+
+        //  Print the Remars part.
+        if( remarkText != null ){
+            // TODO: Create a proper return text split as with Summary.  Issue #2.
+            Out( "/// <remarks>" + remarkText + "</remarks>" );
         }
     }
 
@@ -1680,38 +1721,50 @@
         Out("// Read more at https://github.com/LosManos/MooD4L/");
     }
 
-    /// <summary>This method writes a create method for a table and index/foreign key.
+    /// <summary>This method writes a create method for a table.
     /// </summary>
     /// <param name="tableName">Could be inferred from tableElement.</param>
     /// <param name="schemaName"></param>
     /// <param name="tableElement"></param>
     /// <param name="columnList"></param>
+    /// <param name="parameterAsObject"></param>
     private void Out_SurfaceCreateMethod( 
         string tableName, 
         string schemaName, 
         XmlElement tableElement, 
-        IEnumerable<XmlElement> columnList )
-    {
-        Out_XmlComment(
-            "This method inserts every field in the " + tableName + " table" +
-            " exclusive the primary key(s).", 
-            columnList.Select( c => c.Attributes["Name"].Value )
-        );
+        IEnumerable<XmlElement> columnList, 
+        bool parameterAsObject = false ){
+        
+        if( parameterAsObject ){
+            Out_XmlComment(
+                "This method inserts every field in the " + tableName + " table" +
+                " exclusive the primary key(s).", 
+                new List<string>(){ "newObject" }, 
+                returnText : "The PK of the newly created row is returned."
+            );
+        }else{
+            Out_XmlComment(
+                "This method inserts every field in the " + tableName + " table" +
+                " exclusive the primary key(s).", 
+                columnList.Select( c => c.Attributes["Name"].Value ), 
+                returnText : "The PK of the newly created row is returned." 
+            );
+        }
 
         // TODO: Move method signature creator to a method of its own.
-        Out_Text( "public {0} Insert( {1} )", 
+        Out_Text( "public {0} Add( {1} )", 
             ReturnObjectWhenInsert ?
                 "IEnumerable<" + CreateDTOClassDeclarationType( tableElement ) + ">" :
                 "int", //   "int" should really be the type of the PK.
-            CreateMethodParameterListString( columnList )
+            //  {1}:
+            parameterAsObject ?
+                CreateDTOClassDeclarationType( tableElement ) + " newObject" :
+                CreateMethodParameterListString( columnList )
         );
         
         Out_Text( @"
             {{    // Template code {{A4830D85-3274-4D81-B3DE-55E7773AE8BE}}.
-
-                //  Wash parameters of the System.DateTime type parameters so they fit in SqlServer.
                 {5}
-
                 //    Reuse a connection if possible.  Create if necessary.  Open connection if necessary.
                 var ctx = MakeConnectionAndTransaction();
 
@@ -1742,7 +1795,11 @@
                 " ( " + CreateQueryInsertParameterListString( columnList ) + " )" +
                 " values( " + CreateQueryInsertParameterListStringWithAtSign( columnList ) + " )\"",
             //  {1}
-            "new { " + CreateObjectAssignmentParameterListString( columnList ) + "}", 
+            "new { " + 
+                CreateObjectAssignmentParameterListString( 
+                    columnList, 
+                    parameterAsObject ? "newObject" : null ) + 
+                "}", 
             //  {2}
             "\"select cast( @@identity as int)\"", 
             //  {3}
@@ -1753,12 +1810,14 @@
             ReturnObjectWhenInsert ?
                 CreateDTOClassDeclarationType( tableElement ) :
                 "int", 
-             //  {5}
-            CreateDateTimeMinMaxWash( columnList )
+            //  {5}
+            CreateDateTimeMinMaxWash( 
+                columnList, 
+                parameterAsObject ? "newObject" : null )
         );
         Out( "" );
     }
-    
+
     /// <summary>This method writes all create methods for a table.
     /// </summary>
     /// <param name="tableName"></param>
@@ -1773,7 +1832,16 @@
             tableName, 
             tableElement.Attributes["Schema"].Value, 
             tableElement, 
-            columnList.Where( c => bool.Parse( c.Attributes["IsPrimaryKey"].Value ) == false )
+            columnList.Where( c => bool.Parse( c.Attributes["IsPrimaryKey"].Value ) == false ), 
+            parameterAsObject : true
+        );
+
+        Out_SurfaceCreateMethod(
+            tableName, 
+            tableElement.Attributes["Schema"].Value, 
+            tableElement, 
+            columnList.Where( c => bool.Parse( c.Attributes["IsPrimaryKey"].Value ) == false ), 
+            parameterAsObject : false
         );
     }
     
