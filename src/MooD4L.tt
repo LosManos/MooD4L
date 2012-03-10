@@ -985,7 +985,21 @@
 
         return (EnvDTE.Project)currentSlnProjects.GetValue(0);
     }
-    
+
+    /// <summary>This method returns a list of the columns that are the primary key
+    //  of the table sent as parameter.
+    /// </summary>
+    /// <param name="tableNode"></param>
+    /// <returns></returns>
+    private IList<XmlNode> GetPrimaryKeyColumnsForTable( XmlNode tableNode )
+    {
+        return 
+            ToList(
+                tableNode.SelectNodes( "Columns/Column[@IsPrimaryKey='True']" )
+            );
+    }
+
+
     /// <summary>This method inserts an XML comment before the element sent as parameter.
     /// Feel free to create one that appends an XML comment too.
     /// </summary>
@@ -1877,13 +1891,59 @@
                     transaction : ctx.Trans
                 );
             }}", 
+            //  {0}
             "\"delete from " + 
             ( UseSchemaForNamespace ?
                 tableElement.Attributes[ "Schema" ].Value + "." :
                 "" ) + 
             tableName + 
-            "\""  );
+            "\""
+        );
         Out( "" );
+
+        Out_XmlComment( 
+            "This method deletes the record corresponding to the parameter.", 
+            new List<string>() { tableName } );
+        Out_Text( @"
+            public void Delete( {1} {2} )
+            {{    //    Template code {{B51766A3-D4FA-4017-BB80-3880664DC904}}
+                var ctx = MakeConnectionAndTransaction();
+                ctx.Conn.Execute( 
+                    {0}, 
+                    {3}, 
+                    transaction : ctx.Trans
+                );
+            }}", 
+            //  {0}
+            "\"delete from " + 
+            ( UseSchemaForNamespace ?
+                tableElement.Attributes[ "Schema" ].Value + "." :
+                "" ) + 
+            tableName + 
+            " where " +
+            CreateQuerySelectEqualParameterListString( 
+                GetPrimaryKeyColumnsForTable( 
+                    tableElement
+                )
+            ) +
+            "\"", 
+            //  {1}
+            CreateDTOClassDeclarationType( tableElement ), 
+            //  {2}
+            tableName, 
+            //  {3}
+            string.Format( 
+                "new {{ {0} }}", 
+                CreateObjectAssignmentParameterListString( 
+                    GetPrimaryKeyColumnsForTable( 
+                        tableElement
+                    ), 
+                    tableName
+                )
+            )
+        );
+        Out( "" );
+
             
         //  Find all the indexes for the table.
         var ixNodeList = ToList( tableElement.SelectNodes( "Indexes/Index" ) ).Cast<XmlElement>();
